@@ -57,6 +57,15 @@ STATE_ABBR_MAP: dict[str, str] = {
     "BR": "Bihar",
     "OD": "Odisha",
     "KL": "Kerala",
+    "AS": "Assam",
+    "JH": "Jharkhand",
+    "CG": "Chhattisgarh",
+    "CT": "Chhattisgarh",
+    "UK": "Uttarakhand",
+    "UT": "Uttarakhand",
+    "HP": "Himachal Pradesh",
+    "DL": "Delhi",
+    "GA": "Goa",
 }
 
 

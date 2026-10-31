@@ -23,48 +23,119 @@ DRIP_FLOW_RATE_L_PER_HOUR_ACRE: float = 16000.0
 # 1 mm of water over 1 acre = 4,046.86 liters
 LITERS_PER_MM_ACRE: float = 4046.86
 
-# Maharashtra District Coordinates Lookup (Centroids for distance estimation)
-MAHARASHTRA_DISTRICT_COORDS: dict[str, tuple[float, float]] = {
-    "ahmednagar": (19.0952, 74.7480),
-    "ahilyanagar": (19.0952, 74.7480),
-    "akola": (20.7002, 77.0082),
-    "amravati": (20.9374, 77.7796),
-    "aurangabad": (19.8762, 75.3433),
-    "chhatrapati sambhajinagar": (19.8762, 75.3433),
-    "beed": (18.9891, 75.7601),
-    "bhandara": (21.1667, 79.6500),
-    "buldhana": (20.5312, 76.1843),
-    "chandrapur": (19.9615, 79.2961),
-    "dhule": (20.9042, 74.7749),
-    "gadchiroli": (20.1809, 80.0017),
-    "gondia": (21.4554, 80.1965),
-    "hingoli": (19.7196, 77.1483),
-    "jalgaon": (21.0077, 75.5626),
-    "jalna": (19.8347, 75.8816),
-    "kolhapur": (16.7050, 74.2433),
-    "latur": (18.4088, 76.5604),
-    "mumbai": (19.0760, 72.8777),
-    "mumbai suburban": (19.0760, 72.8777),
-    "nagpur": (21.1458, 79.0882),
-    "nanded": (19.1383, 77.3210),
-    "nandurbar": (21.3697, 74.2403),
-    "nashik": (19.9975, 73.7898),
-    "osmanabad": (18.1856, 76.0419),
-    "dharashiv": (18.1856, 76.0419),
-    "palghar": (19.6967, 72.7699),
-    "parbhani": (19.2612, 76.7767),
-    "pune": (18.5204, 73.8567),
-    "raigad": (18.5158, 73.1822),
-    "ratnagiri": (16.9902, 73.3120),
-    "sangli": (16.8524, 74.5815),
-    "satara": (17.6805, 74.0183),
-    "sindhudurg": (16.1186, 73.6976),
-    "solapur": (17.6599, 75.9064),
-    "thane": (19.2183, 72.9781),
-    "wardha": (20.7453, 78.6022),
-    "washim": (20.1112, 77.1345),
+# All-India District Coordinates Lookup (Centroids for distance & spatial arbitrage estimation)
+INDIA_DISTRICT_COORDS: dict[str, tuple[float, float]] = {
+    # --- MAHARASHTRA ---
+    "ahmednagar": (19.0952, 74.7480), "ahilyanagar": (19.0952, 74.7480),
+    "akola": (20.7002, 77.0082), "amravati": (20.9374, 77.7796),
+    "aurangabad": (19.8762, 75.3433), "chhatrapati sambhajinagar": (19.8762, 75.3433),
+    "beed": (18.9891, 75.7601), "bhandara": (21.1667, 79.6500),
+    "buldhana": (20.5312, 76.1843), "chandrapur": (19.9615, 79.2961),
+    "dhule": (20.9042, 74.7749), "gadchiroli": (20.1809, 80.0017),
+    "gondia": (21.4554, 80.1965), "hingoli": (19.7196, 77.1483),
+    "jalgaon": (21.0077, 75.5626), "jalna": (19.8347, 75.8816),
+    "kolhapur": (16.7050, 74.2433), "latur": (18.4088, 76.5604),
+    "mumbai": (19.0760, 72.8777), "mumbai suburban": (19.0760, 72.8777),
+    "nagpur": (21.1458, 79.0882), "nanded": (19.1383, 77.3210),
+    "nandurbar": (21.3697, 74.2403), "nashik": (19.9975, 73.7898),
+    "osmanabad": (18.1856, 76.0419), "dharashiv": (18.1856, 76.0419),
+    "palghar": (19.6967, 72.7699), "parbhani": (19.2612, 76.7767),
+    "pune": (18.5204, 73.8567), "raigad": (18.5158, 73.1822),
+    "ratnagiri": (16.9902, 73.3120), "sangli": (16.8524, 74.5815),
+    "satara": (17.6805, 74.0183), "sindhudurg": (16.1186, 73.6976),
+    "solapur": (17.6599, 75.9064), "thane": (19.2183, 72.9781),
+    "wardha": (20.7453, 78.6022), "washim": (20.1112, 77.1345),
     "yavatmal": (20.3888, 78.1204),
+
+    # --- PUNJAB ---
+    "ludhiana": (30.9010, 75.8573), "amritsar": (31.6340, 74.8723),
+    "jalandhar": (31.3260, 75.5762), "patiala": (30.3398, 76.3869),
+    "bathinda": (30.2110, 74.9455), "sangrur": (30.2458, 75.8421),
+    "firozpur": (30.9237, 74.6114), "fazilka": (30.4037, 74.0254),
+    "hoshiarpur": (31.5273, 75.9149), "moga": (30.8165, 75.1717),
+    "kapurthala": (31.3802, 75.3815), "khanna": (30.7046, 76.2217),
+
+    # --- HARYANA ---
+    "karnal": (29.6857, 76.9905), "hisar": (29.1492, 75.7217),
+    "ambala": (30.3782, 76.7767), "sirsa": (29.5349, 75.0289),
+    "kurukshetra": (29.9695, 76.8783), "rohtak": (28.8955, 76.6066),
+    "panipat": (29.3909, 76.9635), "sonipat": (28.9931, 77.0151),
+    "fatehabad": (29.5147, 75.4542), "jind": (29.3140, 76.3149),
+
+    # --- MADHYA PRADESH ---
+    "indore": (22.7196, 75.8577), "ujjain": (23.1765, 75.7885),
+    "bhopal": (23.2599, 77.4126), "dewas": (22.9676, 76.0534),
+    "jabalpur": (23.1815, 79.9864), "gwalior": (26.2183, 78.1828),
+    "sagar": (23.8388, 78.7378), "dhar": (22.5978, 75.2974),
+    "khargone": (21.8219, 75.6120), "ratlam": (23.3315, 75.0367),
+    "mandsaur": (24.0722, 75.0694), "neemuch": (24.4608, 74.8727),
+    "hoshangabad": (22.7519, 77.7289), "narmadapuram": (22.7519, 77.7289),
+    "sehore": (23.2031, 77.0844), "vidisha": (23.5251, 77.8081),
+
+    # --- GUJARAT ---
+    "rajkot": (22.3039, 70.8022), "ahmedabad": (23.0225, 72.5714),
+    "surat": (21.1702, 72.8311), "vadodara": (22.3072, 73.1812),
+    "junagadh": (21.5222, 70.4579), "bhavnagar": (21.7645, 72.1519),
+    "mehsana": (23.5880, 72.3693), "amreli": (21.6032, 71.2221),
+    "jamnagar": (22.4707, 70.0577), "anand": (22.5645, 72.9289),
+    "kheda": (22.7540, 72.6844), "banaskantha": (24.1724, 72.4346),
+    "gondal": (21.9619, 70.7937),
+
+    # --- UTTAR PRADESH ---
+    "varanasi": (25.3176, 82.9739), "lucknow": (26.8467, 80.9462),
+    "kanpur": (26.4499, 80.3319), "agra": (27.1767, 78.0081),
+    "meerut": (28.9845, 77.7064), "bareilly": (28.3670, 79.4304),
+    "aligarh": (27.8974, 78.0880), "gorakhpur": (26.7606, 83.3732),
+    "prayagraj": (25.4358, 81.8463), "allahabad": (25.4358, 81.8463),
+    "mathura": (27.4924, 77.6737), "moradabad": (28.8351, 78.7747),
+    "muzaffarnagar": (29.4727, 77.7085), "bulandshahr": (28.4069, 77.8498),
+
+    # --- RAJASTHAN ---
+    "jaipur": (26.9124, 75.7873), "kota": (25.2138, 75.8648),
+    "jodhpur": (26.2389, 73.0243), "bikaner": (28.0229, 73.3119),
+    "sri ganganagar": (29.9038, 73.8772), "ganganagar": (29.9038, 73.8772),
+    "alwar": (27.5530, 76.6346), "baran": (25.1011, 76.5132),
+    "bundi": (25.4415, 75.6441), "jhalawar": (24.5968, 76.1609),
+    "hanumangarh": (29.5819, 74.3294), "nagaur": (27.1983, 73.7493),
+
+    # --- ANDHRA PRADESH & TELANGANA ---
+    "guntur": (16.3067, 80.4365), "krishna": (16.1875, 81.1389),
+    "vijayawada": (16.5062, 80.6480), "kurnool": (15.8281, 78.0373),
+    "visakhapatnam": (17.6868, 83.2185), "anantapur": (14.6819, 77.6006),
+    "east godavari": (17.2473, 81.7011), "west godavari": (16.7107, 81.0952),
+    "chittoor": (13.2172, 79.1003), "warangal": (17.9689, 79.5941),
+    "hyderabad": (17.3850, 78.4867), "nizamabad": (18.6725, 78.0941),
+    "karimnagar": (18.4386, 79.1288), "khammam": (17.2473, 80.1514),
+
+    # --- KARNATAKA ---
+    "belagavi": (15.8497, 74.4977), "belgaum": (15.8497, 74.4977),
+    "dharwad": (15.4589, 75.0078), "hubballi": (15.3647, 75.1240),
+    "mysuru": (12.2958, 76.6394), "mysore": (12.2958, 76.6394),
+    "mandya": (12.5218, 76.8951), "shivamogga": (13.9299, 75.5681),
+    "shimoga": (13.9299, 75.5681), "ballari": (15.1394, 76.9214),
+    "davanagere": (14.4644, 75.9218), "kalaburagi": (17.3297, 76.8343),
+    "raichur": (16.2076, 77.3463), "bengaluru": (12.9716, 77.5946),
+
+    # --- TAMIL NADU ---
+    "coimbatore": (11.0168, 76.9558), "madurai": (9.9252, 78.1198),
+    "thanjavur": (10.7870, 79.1378), "salem": (11.6643, 78.1460),
+    "erode": (11.3410, 77.7172), "tiruchirappalli": (10.7905, 78.7047),
+    "chennai": (13.0827, 80.2707),
+
+    # --- BIHAR ---
+    "patna": (25.5941, 85.1376), "muzaffarpur": (26.1209, 85.3647),
+    "gaya": (24.7914, 85.0002), "bhagalpur": (25.2425, 86.9842),
+    "purnia": (25.7771, 87.4753), "nalanda": (25.1357, 85.4578),
+
+    # --- WEST BENGAL & ODISHA ---
+    "purba bardhaman": (23.2324, 87.8615), "burdwan": (23.2324, 87.8615),
+    "hooghly": (22.8963, 88.2461), "nadia": (23.4710, 88.5565),
+    "cuttack": (20.4625, 85.8828), "bhubaneswar": (20.2961, 85.8245),
+    "sambalpur": (21.4669, 83.9812), "bargarh": (21.3340, 83.6200),
 }
+
+# Backward compatibility alias
+MAHARASHTRA_DISTRICT_COORDS = INDIA_DISTRICT_COORDS
 
 # FAO-56 Crop Coefficients (Kc) across growth stages
 FAO_CROP_COEFFICIENTS: dict[str, dict[str, float]] = {

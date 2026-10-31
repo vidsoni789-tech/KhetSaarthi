@@ -121,7 +121,7 @@ st.markdown("""
 </style>
 <div class="hero">
   <h1>🌱 KhetSaarthi</h1>
-  <p>Multilingual Farm Risk & Market Advisory Assistant — Live Weather, AGMARKNET Prices & Heuristic Field Decisions.</p>
+  <p>Pan-India Multilingual Farm Risk, Precision Irrigation & Market Advisory — Live across all 28 States & UTs of India.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -200,16 +200,28 @@ def _cached_run_advisory(
 
 # --- SIDEBAR CONTROLS & PRESETS ---
 with st.sidebar:
-    st.markdown("### 🎯 1-Click Judge Demos")
-    st.caption("Instantly test verified Maharashtra scenarios with zero typing:")
+    st.markdown("### 🎯 1-Click Pan-India Demos")
+    st.caption("Instantly test verified scenarios across North, Central, West & South India:")
 
     demo_presets = [
         {
-            "name": "🌱 Preset 1: Nashik (Flowering Wet Stress)",
-            "location": "Nashik, Maharashtra",
+            "name": "🌾 Preset 1: Punjab (Ludhiana - Wheat)",
+            "location": "Ludhiana, Punjab",
+            "crop": "Wheat",
+            "stage": "Vegetative",
+            "lang_label": "हिन्दी (Hindi)",
+            "soil_texture": "Loamy / Medium Alluvial",
+            "soil_moisture": "dry",
+            "irrigation_method": "Furrow / Flood (पाटपाणी / खुला प्रवाह)",
+            "target_pest": "None / Preventive Scouting",
+            "pesticide_product": "",
+        },
+        {
+            "name": "🌱 Preset 2: MP (Indore - Soybean)",
+            "location": "Indore, Madhya Pradesh",
             "crop": "Soybean",
             "stage": "Flowering",
-            "lang_label": "मराठी (Marathi)",
+            "lang_label": "हिन्दी (Hindi)",
             "soil_texture": "Black Cotton / Clayey (Vertisol)",
             "soil_moisture": "moist",
             "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
@@ -217,34 +229,58 @@ with st.sidebar:
             "pesticide_product": "Chlorantraniliprole 18.5% SC",
         },
         {
-            "name": "🌾 Preset 2: Latur (Harvest Spoilage Risk)",
-            "location": "Latur, Maharashtra",
-            "crop": "Soybean",
-            "stage": "Maturity / Harvest",
-            "lang_label": "हिन्दी (Hindi)",
-            "soil_texture": "Black Cotton / Clayey (Vertisol)",
-            "soil_moisture": "dry",
-            "irrigation_method": "Sprinkler (तुषार सिंचन / स्प्रिंकलर)",
-            "target_pest": "None / Preventive Scouting",
-            "pesticide_product": "",
-        },
-        {
-            "name": "🧅 Preset 3: Lasalgaon (Smart Fallback)",
-            "location": "Lasalgaon, Nashik",
+            "name": "🧅 Preset 3: Maharashtra (Nashik - Onion)",
+            "location": "Nashik, Maharashtra",
             "crop": "Onion",
-            "stage": "Vegetative",
-            "lang_label": "English",
-            "soil_texture": "Loamy / Medium Alluvial",
+            "stage": "Flowering",
+            "lang_label": "मराठी (Marathi)",
+            "soil_texture": "Black Cotton / Clayey (Vertisol)",
             "soil_moisture": "moist",
             "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
             "target_pest": "Onion Thrips (Thrips tabaci)",
             "pesticide_product": "Spinetoram 11.7% SC",
         },
+        {
+            "name": "🌿 Preset 4: Gujarat (Rajkot - Cotton)",
+            "location": "Rajkot, Gujarat",
+            "crop": "Cotton",
+            "stage": "Flowering",
+            "lang_label": "English",
+            "soil_texture": "Loamy / Medium Alluvial",
+            "soil_moisture": "moist",
+            "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
+            "target_pest": "Whitefly & Jassids (Sucking pest complex)",
+            "pesticide_product": "Flonicamid 50% WG",
+        },
+        {
+            "name": "🌾 Preset 5: Haryana (Karnal - Rice)",
+            "location": "Karnal, Haryana",
+            "crop": "Rice",
+            "stage": "Vegetative",
+            "lang_label": "हिन्दी (Hindi)",
+            "soil_texture": "Loamy / Medium Alluvial",
+            "soil_moisture": "moist",
+            "irrigation_method": "Furrow / Flood (पाटपाणी / खुला प्रवाह)",
+            "target_pest": "None / Preventive Scouting",
+            "pesticide_product": "",
+        },
+        {
+            "name": "🌶️ Preset 6: AP (Guntur - Tomato)",
+            "location": "Guntur, Andhra Pradesh",
+            "crop": "Tomato",
+            "stage": "Flowering",
+            "lang_label": "English",
+            "soil_texture": "Sandy / Light Murrum",
+            "soil_moisture": "dry",
+            "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
+            "target_pest": "Fruit Borer (Helicoverpa armigera)",
+            "pesticide_product": "Flubendiamide 39.35% SC",
+        },
     ]
 
     selected_preset = None
     for p in demo_presets:
-        if st.button(p["name"], key=f"btn_{p['location']}", use_container_width=True):
+        if st.button(p["name"], key=f"btn_{p['location']}_{p['crop']}", use_container_width=True):
             selected_preset = p
             st.session_state["location_input"] = p["location"]
             st.session_state["crop_input"] = p["crop"]
@@ -257,20 +293,21 @@ with st.sidebar:
             st.session_state["pesticide_product_input"] = p["pesticide_product"]
 
     st.divider()
-    st.markdown("### 🌾 Custom Farm Details")
+    st.markdown("### 🌾 Custom Farm Location")
+    st.caption("🌍 Enter ANY village, town, tehsil, or district across all 28 Indian States & 8 UTs:")
 
-    default_loc = st.session_state.get("location_input", "Nashik, Maharashtra")
-    default_crop = st.session_state.get("crop_input", "Soybean")
-    default_stage = st.session_state.get("stage_input", "Flowering")
-    default_lang = st.session_state.get("lang_input", "मराठी (Marathi)")
-    default_soil_tex = st.session_state.get("soil_texture_input", "Black Cotton / Clayey (Vertisol)")
+    default_loc = st.session_state.get("location_input", "Ludhiana, Punjab")
+    default_crop = st.session_state.get("crop_input", "Wheat")
+    default_stage = st.session_state.get("stage_input", "Vegetative")
+    default_lang = st.session_state.get("lang_input", "हिन्दी (Hindi)")
+    default_soil_tex = st.session_state.get("soil_texture_input", "Loamy / Medium Alluvial")
     default_soil_mst = st.session_state.get("soil_moisture_input", "moist")
     default_irr_meth = st.session_state.get("irr_method_input", "Drip Irrigation (ठिबक सिंचन / ड्रिप)")
-    default_pest = st.session_state.get("target_pest_input", "Spodoptera / Tobacco Caterpillar (Spodoptera litura)")
-    default_chem = st.session_state.get("pesticide_product_input", "Chlorantraniliprole 18.5% SC")
+    default_pest = st.session_state.get("target_pest_input", "None / Preventive Scouting")
+    default_chem = st.session_state.get("pesticide_product_input", "")
 
     with st.form("farm_form"):
-        location = st.text_input("Village / Town / District", value=default_loc, placeholder="e.g. Nashik, Maharashtra")
+        location = st.text_input("Village / Town / District / City (Anywhere in India)", value=default_loc, placeholder="e.g. Ludhiana, Punjab / Indore, MP / Varanasi, UP / Guntur, AP / Nashik, MH")
         crop_idx = CROPS.index(default_crop) if default_crop in CROPS else 0
         crop = st.selectbox("Crop", CROPS, index=crop_idx)
         stage_idx = STAGES.index(default_stage) if default_stage in STAGES else 2
@@ -415,7 +452,7 @@ if not report:
     c3.metric("Mandi Dataset", "data.gov.in AGMARKNET")
     c4.metric("Integrity Guardrail", "Zero Fabricated Data")
 
-    st.info("💡 **Hackathon Tip:** Click **'🌱 Preset 1: Nashik'** in the sidebar to observe live wet-spell heuristics, the 7-day spray suitability schedule, and grounded Marathi Q&A.")
+    st.info("💡 **Hackathon Tip:** Click any of the **1-Click Pan-India Demos** (Punjab, MP, Maharashtra, Gujarat, Haryana, AP) in the sidebar or enter any Indian town/village to test live weather, irrigation, and mandi intelligence across all 28 states!")
     st.stop()
     import sys
     sys.exit(0)

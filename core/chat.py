@@ -12,6 +12,14 @@ import time
 from typing import Any
 
 import requests
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Ensure .env is loaded regardless of current working directory
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file)
+load_dotenv()
 
 # Intent keyword triggers across English, Hindi, and Marathi
 INTENTS: dict[str, list[str]] = {
@@ -53,6 +61,17 @@ INTENTS: dict[str, list[str]] = {
         "कटाई", "तुड़ाई", "फसल पकना", "कटाई कब",
         "काढणी", "कापणी", "तोडणी", "पीक काढणी",
     ],
+    "time": [
+        "time", "what is the time", "time rn", "what time", "current time", "date", "what is the date",
+        "समय", "तारीख", "वक्त", "कितने बजे", "आज की तारीख",
+        "वेळ", "दिनांक", "किती वाजले", "आजचा वार",
+    ],
+    "help": [
+        "tell me anything", "can u tell me anything", "what can you do", "help", "guide",
+        "features", "options", "what do you do", "capabilities", "overview",
+        "क्या कर सकते हो", "क्या बता सकते हो", "मदद", "सुझाव", "जानकारी",
+        "काय करू शकता", "काय सांगू शकता", "मदत", "मार्गदर्शन", "माहिती",
+    ],
 }
 
 REPLIES: dict[str, dict[str, str]] = {
@@ -68,6 +87,8 @@ REPLIES: dict[str, dict[str, str]] = {
         "harvest": "The forecast shows **{amount:.1f} mm** as the highest daily rainfall over the next seven days ({date}). For harvest-stage decisions, use a suitable dry window and protect harvested produce from rain; verify the forecast again before scheduling.",
         "summary": "The current weather-risk index is **{score}/100 ({label})** for **{crop}**, at the **{stage}** stage. The index is a transparent heuristic, not a probability of crop loss. Recommended actions: {actions}",
         "fallback": "I am KhetSaarthi 🌱, an agricultural decision-support assistant. I specialize in farm irrigation planning, pesticide weather suitability, crop stage risks, and mandi prices. Try asking: 'When should I irrigate?', 'When is it suitable to spray?', or 'When will it rain?'",
+        "help": "Here is everything I can help you with for your farm:\n\n• 🌦️ **7-Day Weather and Rain Risk:** Peak rainfall dates, rain probability %, and wind gust alerts.\n• 💧 **Precision Irrigation Planning:** Daily crop evapotranspiration (ETc = ET₀ × Kc), effective rainfall deduction, and soil moisture checks.\n• 🌿 **Pesticide Weather Suitability:** 48-hour rainfastness window, wind drift safety, and CIBRC label compliance.\n• 🛒 **Mandi Arbitrage and Spoilage VaR:** Real AGMARKNET prices across India, road distance and transport costs, and weather spoilage value-at-risk.\n\nTry asking: *'When should I irrigate?'*, *'Is it safe to spray tomorrow?'*, or *'What is the mandi price?'*",
+        "time": "🕒 Current local time is **{time_str} IST** on **{date_str}**. KhetSaarthi agricultural decision system is active.",
     },
     "hi": {
         "greeting": "नमस्ते! मैं खेतसारथी 🌱 हूँ — आपका कृषि जोखिम, सिंचाई नियोजन और मंडी परामर्श सहायक। आज मैं आपकी क्या सहायता कर सकता हूँ? आप पूछ सकते हैं: 'सिंचाई कब करें?', 'कीटनाशक छिड़काव का अनुकूल दिन कौन सा है?', 'बारिश कब होगी?' या 'मंडी भाव क्या है?'",
@@ -81,6 +102,8 @@ REPLIES: dict[str, dict[str, str]] = {
         "harvest": "अगले सात दिनों में अधिकतम दैनिक बारिश **{amount:.1f} मिमी** {date} को अनुमानित है। कटाई के लिए उपयुक्त सूखा समय चुनें और कटी उपज को बारिश से बचाएँ; समय तय करने से पहले पूर्वानुमान फिर देखें।",
         "summary": "**{crop}** की **{stage}** अवस्था के लिए मौसम जोखिम सूचकांक **{score}/100 ({label})** है। यह पारदर्शी नियमों पर आधारित सूचकांक है, फसल नुकसान की संभावना नहीं। सुझाव: {actions}",
         "fallback": "मैं खेतसारथी 🌱 हूँ — आपका कृषि निर्णय-सहायक। मैं फसल सिंचाई योजना, कीटनाशक छिड़काव मौसम, फसल जोखिम और मंडी भाव की जानकारी देता हूँ। आप पूछ सकते हैं: 'सिंचाई कब करें?', 'छिड़काव कब करें?', या 'मंडी भाव क्या है?'",
+        "help": "मैं आपके खेत और फसल के लिए निम्नलिखित सभी जानकारियाँ दे सकता हूँ:\n\n• 🌦️ **7 दिनों का मौसम व बारिश जोखिम:** सबसे अधिक बारिश का दिन, संभावना (%) और हवा की गति।\n• 💧 **सटीक सिंचाई नियोजन:** फसल की दैनिक जल खपत (ETc = ET₀ × Kc), प्रभावी बारिश और मिट्टी की नमी का आंकलन।\n• 🌿 **कीटनाशक छिड़काव मौसम उपयुक्तता:** 48 घंटे का रेनफास्टनेस समय, हवा बहाव सुरक्षा और सुरक्षित दिन।\n• 🛒 **मंडी भाव और तुलाई लाभ:** अखिल भारतीय AGMARKNET भाव, परिवहन खर्च घटाकर शुद्ध मुनाफा और मौसम से फसल नुकसान का वित्तीय जोखिम।\n\nआप पूछ सकते हैं: *'सिंचाई कब करें?'*, *'छिड़काव का सुरक्षित दिन कौन सा है?'*, या *'मंडी भाव क्या है?'*",
+        "time": "🕒 वर्तमान समय **{time_str} IST** ({date_str}) है। खेतसारथी कृषि निर्णय प्रणाली सक्रिय है।",
     },
     "mr": {
         "greeting": "नमस्कार! मी खेतसारथी 🌱 — आपला शेती जोखीम, सिंचन नियोजन आणि बाजारभाव सहाय्यक. मी आज तुम्हाला कशी मदत करू शकतो? आपण मला विचारू शकता: 'शेतात पाणी कधी द्यावे?', 'कीटकनाशक फवारणीस अनुकूल दिवस कोणता?', 'पाऊस कधी पडेल?' किंवा 'बाजारभाव काय आहे?'",
@@ -94,6 +117,8 @@ REPLIES: dict[str, dict[str, str]] = {
         "harvest": "पुढील सात दिवसांत सर्वाधिक दैनिक पाऊस **{amount:.1f} मिमी** {date} रोजी अपेक्षित आहे. काढणीसाठी योग्य कोरडा कालावधी निवडा आणि काढलेले पीक पावसापासून सुरक्षित ठेवा; नियोजनापूर्वी अंदाज पुन्हा तपासा.",
         "summary": "**{crop}** पिकाच्या **{stage}** अवस्थेसाठी हवामान जोखीम निर्देशांक **{score}/100 ({label})** आहे. हा पारदर्शक नियमांवर आधारित निर्देशांक आहे; पीक नुकसानीची शक्यता नाही. कृती: {actions}",
         "fallback": "मी खेतसारथी 🌱 आहे — आपला कृषी सल्लागार. मी शेतातील सिंचन नियोजन, कीटकनाशक फवारणी हवामान अनुकूलता, पीक जोखीम आणि बाजारभाव याबद्दल मार्गदर्शन करतो. आपण विचारू शकता: 'पाणी कधी द्यावे?', 'फवारणी कधी करावी?' किंवा 'बाजारभाव काय आहे?'",
+        "help": "मी आपल्या शेती आणि पिकासाठी खालील सर्व मुद्द्यांवर मार्गदर्शन करू शकतो:\n\n• 🌦️ **७ दिवसांचा हवामान व पाऊस जोखीम:** सर्वाधिक पावसाचा दिवस, शक्यता (%) आणि वाऱ्याचा वेग.\n• 💧 **अचूक सिंचन नियोजन:** पिकाची दैनिक पाण्याची गरज (ETc = ET₀ × Kc), प्रभावी पाऊस आणि जमिनीतील ओलावा तपासणी.\n• 🌿 **कीटकनाशक फवारणी हवामान अनुकूलता:** ४८ तासांचा रेनफास्टनेस कालावधी, वाऱ्याची गती आणि सुरक्षित फवारणी दिवस.\n• 🛒 **बाजारभाव आणि वाहतूक नफा:** संपूर्ण भारतातील थेट AGMARKNET दर, वाहतूक खर्च वजा जाता निव्वळ नफा आणि काढणी जोखीम.\n\nआपण विचारू शकता: *'पाणी कधी द्यावे?'*, *'फवारणीस अनुकूल दिवस कोणता?'*, किंवा *'आजचा बाजारभाव काय?'*",
+        "time": "🕒 सध्याची वेळ **{time_str} IST** ({date_str}) आहे. खेतसारथी कृषी सल्ला प्रणाली कार्यरत आहे.",
     },
 }
 
@@ -152,6 +177,19 @@ def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | N
     # GREETING INTENT
     if intent == "greeting":
         return REPLIES[lang]["greeting"]
+
+    # TIME / DATE INTENT
+    if intent == "time" or any(w in q for w in ["what is the time", "what is the date", "time rn", "what time", "current time", "kitne baje", "किती वाजले", "कितने बजे", "आज की तारीख", "आजचा वार"]):
+        from datetime import datetime, timezone, timedelta
+        ist = timezone(timedelta(hours=5, minutes=30))
+        now = datetime.now(ist)
+        time_str = now.strftime("%I:%M %p")
+        date_str = now.strftime("%d %B %Y")
+        return REPLIES[lang]["time"].format(time_str=time_str, date_str=date_str)
+
+    # HELP / TELL ME ANYTHING INTENT
+    if intent == "help" or any(p in q for p in ["tell me anything", "can u tell me", "can you tell me", "what can you do", "help", "guide", "kya bata", "काय सांगू", "overview"]):
+        return REPLIES[lang]["help"]
 
     risk = report.get("risk", {})
     rows = risk.get("forecast_rows", [])
@@ -346,11 +384,11 @@ def resolve_llm_config(
     if llm_api_key and llm_api_key.strip():
         clean_key = llm_api_key.strip()
         prov = (llm_provider or "").strip().lower()
-        if prov == "gemini" or clean_key.startswith("AIza"):
+        if prov == "gemini" or clean_key.startswith("AIza") or clean_key.startswith("AQ."):
             return (
                 "Google Gemini",
                 "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                "gemini-3.8-flash",
+                "gemini-3-flash-preview",
                 clean_key,
             )
         if prov in ("huggingface", "hf") or clean_key.startswith("hf_"):
@@ -369,6 +407,9 @@ def resolve_llm_config(
         )
 
     # 2. Check environment / st.secrets
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return None
+
     def _get_secret(key_name: str) -> str:
         ev = os.getenv(key_name, "").strip()
         if ev:
@@ -393,7 +434,7 @@ def resolve_llm_config(
         return (
             "Google Gemini",
             "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            "gemini-3.8-flash",
+            "gemini-3-flash-preview",
             gemini_key,
         )
 

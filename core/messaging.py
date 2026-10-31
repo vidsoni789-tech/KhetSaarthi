@@ -173,7 +173,7 @@ def send_real_whatsapp_message(
 
     # Helper to resolve credentials from args, env, or st.secrets
     def _res(val: str | None, *env_keys: str) -> str:
-        if val is not None and str(val).strip():
+        if val is not None:
             return str(val).strip()
         for k in env_keys:
             ev = os.getenv(k, "").strip()
