@@ -290,7 +290,7 @@ def resolve_llm_config(
             return (
                 "Google Gemini",
                 "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                "gemini-2.5-flash",
+                "gemini-3.8-flash",
                 clean_key,
             )
         if prov in ("huggingface", "hf") or clean_key.startswith("hf_"):
@@ -333,7 +333,7 @@ def resolve_llm_config(
         return (
             "Google Gemini",
             "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            "gemini-2.5-flash",
+            "gemini-3.8-flash",
             gemini_key,
         )
 

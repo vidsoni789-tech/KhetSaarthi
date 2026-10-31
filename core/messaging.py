@@ -226,12 +226,16 @@ def send_real_whatsapp_message(
                     "deep_link": deep_link,
                 }
             err_msg = data.get("message") or f"Twilio HTTP {resp.status_code}"
+            if "contentsid" in str(err_msg).lower():
+                detail = "Twilio WhatsApp requires an approved Template (ContentSid) or active Sandbox join session. Click the 1-Click WhatsApp button below to deliver immediately!"
+            else:
+                detail = f"Twilio error: {err_msg}"
             return {
                 "sent": False,
                 "provider": "Twilio WhatsApp API",
                 "message_sid": None,
                 "latency_ms": elapsed_ms,
-                "status_detail": f"Twilio error: {err_msg}",
+                "status_detail": detail,
                 "deep_link": deep_link,
             }
         except Exception as exc:
