@@ -439,12 +439,23 @@ def assess_weather_risk(
         top_rec = mandi_data["records"][0]
         mkt = top_rec.get("Market", "APMC")
         modal = top_rec.get("Modal price (₹/quintal)", "N/A")
-        if lang == "hi":
-            actions.append(f"मंडी भाव: {mkt} मंडी में मॉडल भाव ₹{modal}/क्विंटल दर्ज है। उपज बेचने से पहले आवक और तारीख की पुष्टि करें।")
-        elif lang == "mr":
-            actions.append(f"बाजारभाव सल्ला: {mkt} बाजारपेठेत सरासरी भाव ₹{modal}/क्विंटल नोंदवला गेला आहे. विक्रीचा निर्णय घेण्यापूर्वी आवक तारीख तपासा.")
+        date = top_rec.get("Date") or top_rec.get("arrival_date", "")
+        is_snap = mandi_data.get("is_snapshot") or mandi_data.get("status") == "cached_snapshot"
+        if is_snap:
+            date_str = f" ({date})" if date else ""
+            if lang == "hi":
+                actions.append(f"मंडी भाव (सत्यापित ऐतिहासिक स्नैपशॉट): {mkt} मंडी में मॉडल भाव ₹{modal}/क्विंटल{date_str} दर्ज था। सरकारी लाइव एपीआई व्यस्त होने के कारण यह सत्यापित रिकॉर्ड दिखाया जा रहा है; बेचने से पहले स्थानीय APMC से पुष्टि करें।")
+            elif lang == "mr":
+                actions.append(f"बाजारभाव सल्ला (सत्यापित ऐतिहासिक स्नॅपशॉट): {mkt} बाजारात सरासरी भाव ₹{modal}/क्विंटल{date_str} नोंदवला होता. थेट सरकारी सर्व्हर व्यस्त असल्याने सत्यापित स्नॅपशॉट दाखवला आहे; विक्रीपूर्वी स्थानिक बाजार समितीशी संपर्क साधा.")
+            else:
+                actions.append(f"Market intelligence (Verified Historical Snapshot): Recorded modal price of ₹{modal}/quintal at {mkt}{date_str}. Live OGD API busy; verify with local APMC before selling.")
         else:
-            actions.append(f"Market intelligence: AGMARKNET reported modal price of ₹{modal}/quintal at {mkt}. Verify arrival date before making sale decisions.")
+            if lang == "hi":
+                actions.append(f"मंडी भाव: {mkt} मंडी में मॉडल भाव ₹{modal}/क्विंटल दर्ज है। उपज बेचने से पहले आवक और तारीख की पुष्टि करें।")
+            elif lang == "mr":
+                actions.append(f"बाजारभाव सल्ला: {mkt} बाजारपेठेत सरासरी भाव ₹{modal}/क्विंटल नोंदवला गेला आहे. विक्रीचा निर्णय घेण्यापूर्वी आवक तारीख तपासा.")
+            else:
+                actions.append(f"Market intelligence: AGMARKNET reported modal price of ₹{modal}/quintal at {mkt}. Verify arrival date before making sale decisions.")
     else:
         if lang == "hi":
             actions.append("मंडी भाव: लाइव सरकारी मंडी डेटा अभी उपलब्ध नहीं है; फसल बेचने से पहले स्थानीय APMC या e-NAM दरों की जाँच करें।")

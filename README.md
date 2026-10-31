@@ -100,7 +100,7 @@ flowchart TD
 |---|---|---|---|
 | **[Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api)** | Place to Lat/Lon resolution | Public REST API | Smart fallback: splits comma queries, ranks by state hints & population |
 | **[Open-Meteo Forecast](https://open-meteo.com/en/docs)** | 7-day daily forecast: rain, temp, wind, ET₀ | Public REST API | Strict timeout (15s); essential step (raises explicit `AgentStepError` on failure) |
-| **[data.gov.in AGMARKNET](https://www.data.gov.in/resource/current-daily-price-various-commodities-various-markets-mandi)** | Daily wholesale market arrivals & modal prices | REST API with API Key | **4.5s fast timeout**; district-to-state fallback; degrades to `PARTIAL_FALLBACK` without breaking weather advisory |
+| **[data.gov.in AGMARKNET](https://www.data.gov.in/resource/current-daily-price-various-commodities-various-markets-mandi)** | Daily wholesale market arrivals & modal prices | REST API with API Key | **4.5s fast timeout**; district-to-state fallback; when public demo key is throttled (`Resource lists`), seamlessly activates **Verified Historical AGMARKNET Snapshot** with explicit badge and recorded arrival dates; missing keys gracefully degrade to weather-only advisory with zero fabricated prices |
 | **[IMD Agromet](https://mausam.imd.gov.in/responsive/agromet_adv_ser_state_current.php)** | Authoritative district agronomic bulletins | Verification link | Reference verification link in UI footer |
 
 ---
@@ -115,7 +115,7 @@ flowchart TD
 
 ```powershell
 # 1. Clone repository & navigate to directory
-git clone https://github.com/your-username/KhetSaarthi.git
+git clone https://github.com/vidsoni789-tech/KhetSaarthi.git
 cd KhetSaarthi
 
 # 2. Create and activate virtual environment
@@ -129,7 +129,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 # Edit .env and insert your DATA_GOV_API_KEY if available
 
-# 5. Run the Automated Test Suite (23 Tests)
+# 5. Run the Automated Test Suite (24 Tests)
 python -m pytest -v
 
 # 6. Launch the Streamlit Application
@@ -142,7 +142,7 @@ streamlit run app.py
 
 1. Push this repository to a public GitHub repository.
 2. Visit [share.streamlit.io](https://share.streamlit.io/) and create an application:
-   - **Repository:** `your-username/KhetSaarthi`
+   - **Repository:** `vidsoni789-tech/KhetSaarthi`
    - **Branch:** `main`
    - **Main file path:** `app.py`
 3. In **App Settings → Secrets**, configure your optional AGMARKNET API key:
@@ -155,7 +155,7 @@ streamlit run app.py
 
 ## 🧪 Automated Testing & Verification
 
-The project includes 23 automated, offline-safe unit tests in `tests/`:
+The project includes 24 automated, offline-safe unit tests in `tests/`:
 
 ```powershell
 python -m pytest -v
@@ -163,13 +163,13 @@ python -m pytest -v
 
 ```text
 ============================= test session starts =============================
-collected 23 items
+collected 24 items
 
-tests\test_phase3_risk_and_chat.py .........                             [ 39%]
-tests\test_risk_engine.py .....                                          [ 60%]
-tests\test_sources_and_agent.py .........                                [100%]
+tests\test_phase3_risk_and_chat.py .........                             [ 37%]
+tests\test_risk_engine.py .....                                          [ 58%]
+tests\test_sources_and_agent.py ..........                               [100%]
 
-============================= 23 passed in 0.75s ==============================
+============================= 24 passed in 0.35s ==============================
 ```
 
 To run the live external API smoke test (requires network access):

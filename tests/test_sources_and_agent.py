@@ -57,6 +57,29 @@ def test_mandi_resource_lists_message_degrades_gracefully():
         assert "Resource lists" in result["message"]
 
 
+def test_mandi_fallback_to_verified_snapshot_on_throttled_key():
+    """When public demo key (579b464d...) receives 'Resource lists', activate verified historical snapshot."""
+    mock_resp = MagicMock()
+    mock_resp.ok = True
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"message": "Resource lists"}
+
+    with patch("requests.Session.get", return_value=mock_resp):
+        result = get_mandi_prices(
+            "Maharashtra",
+            "Soybean",
+            api_key="579b464db66ec23bdd0000016bb7b829ca6540225f7d9c97f4cacdbc",
+            district="Nashik",
+        )
+        assert result["connected"] is True
+        assert result["status"] == "cached_snapshot"
+        assert result["is_snapshot"] is True
+        assert len(result["records"]) > 0
+        assert result["records"][0]["Market"] == "Nashik"
+        assert result["records"][0]["Commodity"] == "Soyabean"
+        assert "Snapshot" in result["badge"]
+
+
 def test_mandi_timeout_degrades_gracefully():
     """When data.gov.in times out after 4.5s, catch ReadTimeout and return degraded dict."""
     with patch("requests.Session.get", side_effect=requests.exceptions.ReadTimeout("Read timed out")):

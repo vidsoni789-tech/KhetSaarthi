@@ -240,7 +240,19 @@ def answer_farmer_query(question: str, report: dict[str, Any] | None, language: 
         summaries: list[str] = []
         for item in available[:3]:
             summaries.append(f"{item.get('Market', 'Market')}: ₹{item.get('Modal price (₹/quintal)')} / quintal ({item.get('Date', 'date unavailable')})")
-        return REPLIES[lang]["market"].format(rows="; ".join(summaries))
+        base_reply = REPLIES[lang]["market"].format(rows="; ".join(summaries))
+        if mandi.get("status") == "cached_snapshot" or mandi.get("is_snapshot"):
+            badge_text = (
+                "📦 **सत्यापित ऐतिहासिक AGMARKNET स्नैपशॉट** (सरकारी लाइव सर्वर व्यस्त होने के कारण अंतिम सत्यापित APMC आवक रिकॉर्ड दिखाया जा रहा है):\n\n"
+                if lang == "hi"
+                else (
+                    "📦 **सत्यापित ऐतिहासिक AGMARKNET स्नॅपशॉट** (थेट सरकारी सर्व्हर व्यस्त असल्याने शेवटचा पडताळलेला APMC आवक रेकॉर्ड दर्शविला आहे):\n\n"
+                    if lang == "mr"
+                    else "📦 **Verified Historical AGMARKNET Snapshot** (Live OGD API busy — showing last verified APMC records with arrival dates):\n\n"
+                )
+            )
+            return badge_text + base_reply
+        return base_reply
 
     # DEFAULT FALLBACK SUMMARY
     actions = " ".join(risk.get("actions", [])[:2])

@@ -181,7 +181,17 @@ def run_advisory(
         mandi = get_mandi_prices(state=state, commodity=commodity, api_key=resolved_key, district=district)
         m_ms = max(1, int((time.perf_counter() - m_t0) * 1000))
 
-        if not mandi.get("connected") or mandi.get("status") == "degraded":
+        if mandi.get("status") == "cached_snapshot":
+            rec_count = len(mandi.get("records", []))
+            level = mandi.get("query_level", "district")
+            log.append({
+                "step": "mandi",
+                "status": "partial_fallback",
+                "latency_ms": m_ms,
+                "detail": f"OGD API busy ({mandi.get('reason', 'throttled demo key')}) — activated Verified Historical AGMARKNET Snapshot ({rec_count} records, {level} level) in {m_ms}ms",
+                "evidence": mandi.get("badge", "Verified Historical AGMARKNET Snapshot"),
+            })
+        elif not mandi.get("connected") or mandi.get("status") == "degraded":
             log.append({
                 "step": "mandi",
                 "status": "partial_fallback",

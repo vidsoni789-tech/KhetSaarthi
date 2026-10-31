@@ -188,7 +188,11 @@ with st.sidebar:
     st.divider()
     st.caption("Live Data Connections")
     st.markdown('<span class="source-pill">Open-Meteo · Live 7-Day Forecast</span>', unsafe_allow_html=True)
-    if _get_api_key():
+    report_obj = st.session_state.get("report")
+    mandi_obj = report_obj.get("mandi", {}) if report_obj else {}
+    if mandi_obj.get("status") == "cached_snapshot":
+        st.markdown('<span class="source-pill" style="background:#fef3c7;color:#92400e;">data.gov.in · Snapshot Fallback</span>', unsafe_allow_html=True)
+    elif _get_api_key():
         st.markdown('<span class="source-pill">data.gov.in · AGMARKNET Active</span>', unsafe_allow_html=True)
     else:
         st.markdown('<span class="source-pill" style="background:#fee2e2;color:#991b1b;">data.gov.in · API Key Needed</span>', unsafe_allow_html=True)
@@ -297,7 +301,11 @@ with k3:
     """, unsafe_allow_html=True)
 
 with k4:
-    if mandi.get("connected") and mandi.get("records"):
+    if mandi.get("status") == "cached_snapshot" or mandi.get("is_snapshot"):
+        top_rec = mandi["records"][0] if mandi.get("records") else {}
+        modal_val = f"₹{top_rec.get('Modal price (₹/quintal)', 'N/A')}/Q"
+        mkt_name = f"📦 Snapshot: {top_rec.get('Market', 'APMC')} ({top_rec.get('Date', '')})"
+    elif mandi.get("connected") and mandi.get("records"):
         top_rec = mandi["records"][0]
         modal_val = f"₹{top_rec.get('Modal price (₹/quintal)', 'N/A')}/Q"
         mkt_name = f"{top_rec.get('Market', 'Mandi')} ({mandi.get('query_level', 'state')})"
@@ -408,7 +416,12 @@ with col_right:
 st.divider()
 st.subheader("🛒 Mandi Price Intelligence (data.gov.in AGMARKNET)")
 
-if mandi.get("connected") and mandi.get("records"):
+if mandi.get("status") == "cached_snapshot" or mandi.get("is_snapshot"):
+    st.warning("📦 **Verified Historical AGMARKNET Snapshot Active**\n\nThe live OGD India government API (`data.gov.in`) is currently busy/throttled for public demo keys. KhetSaarthi is displaying the last verified real APMC arrival records with recorded dates. Rates are NOT estimated or synthetic.")
+    mandi_df = pd.DataFrame(mandi["records"])
+    st.caption(f"Retrieved {len(mandi_df)} verified snapshot records for {inputs.get('crop')} ({mandi.get('query_level', 'district')} level). Note the exact arrival date for each market.")
+    st.dataframe(mandi_df, use_container_width=True, hide_index=True)
+elif mandi.get("connected") and mandi.get("records"):
     mandi_df = pd.DataFrame(mandi["records"])
     st.caption(f"Retrieved {len(mandi_df)} matching wholesale records ({mandi.get('query_level', 'state')} query). Verify arrival dates before executing farmgate sales.")
     st.dataframe(mandi_df, use_container_width=True, hide_index=True)
