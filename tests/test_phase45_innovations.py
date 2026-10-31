@@ -265,3 +265,4 @@ def test_agent_orchestrator_includes_economics_and_water():
 
         # Verify alias works identically
         assert run_khetsaarthi_agent == run_advisory
+

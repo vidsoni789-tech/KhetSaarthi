@@ -20,11 +20,21 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from core.agent import AgentStepError, run_advisory
-from core.chat import answer_farmer_query, get_suggested_questions
+from core.chat import (
+    answer_farmer_query,
+    get_active_chat_engine_info,
+    get_suggested_questions,
+)
 from core.economics import (
     apply_weather_stress_deltas,
     compute_crop_water_balance,
     evaluate_mandi_arbitrage_and_hold_risk,
+)
+from core.messaging import (
+    clean_phone_number,
+    format_whatsapp_advisory_message,
+    format_whatsapp_deep_link,
+    send_real_whatsapp_message,
 )
 from core.risk_engine import assess_weather_risk
 from core.sources import COMMODITY_MAP
@@ -106,13 +116,33 @@ STAGES: list[str] = ["Sowing", "Vegetative", "Flowering", "Maturity / Harvest"]
 
 
 def _get_api_key() -> str:
-    """Retrieve API key from env or Streamlit secrets."""
+    """Retrieve Mandi API key from sidebar input, env, or Streamlit secrets."""
+    sb_key = st.session_state.get("sb_data_gov_input", "").strip()
+    if sb_key:
+        return sb_key
     value = os.getenv("DATA_GOV_API_KEY", "")
     try:
         value = st.secrets.get("DATA_GOV_API_KEY", value)
     except Exception:
         pass
     return str(value or "").strip()
+
+
+def _get_llm_key() -> str:
+    """Retrieve LLM API key from sidebar input, env, or secrets."""
+    sb_key = st.session_state.get("sb_llm_key_input", "").strip()
+    if sb_key:
+        return sb_key
+    for key_name in ["GROQ_API_KEY", "GEMINI_API_KEY", "HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"]:
+        val = os.getenv(key_name, "").strip()
+        if not val:
+            try:
+                val = str(st.secrets.get(key_name, "")).strip()
+            except Exception:
+                pass
+        if val:
+            return val
+    return ""
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -213,6 +243,28 @@ with st.sidebar:
         sim_temp = st.slider("Heatwave Shift (+°C)", min_value=0, max_value=10, value=0, step=1, key="sim_temp")
         sim_wind = st.slider("Wind Gust Override (+km/h)", min_value=0, max_value=40, value=0, step=5, key="sim_wind")
         is_stress_active = (sim_rain > 0 or sim_temp > 0 or sim_wind > 0)
+
+    with st.expander("🔑 Advanced Integrations (LLM & WhatsApp)", expanded=False):
+        st.caption("Optional credentials for live conversational AI and real WhatsApp push delivery.")
+        st.text_input(
+            "Groq / Gemini / HF API Key",
+            value=os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("HF_TOKEN", ""),
+            type="password",
+            help="Powers live multi-turn farmer chat via Groq LLaMA 3.3, Gemini 2.5, or Hugging Face. If blank, deterministic engine is used.",
+            key="sb_llm_key_input",
+        )
+        st.text_input(
+            "data.gov.in API Key",
+            value=os.getenv("DATA_GOV_API_KEY", ""),
+            type="password",
+            help="For live AGMARKNET mandi arrivals. If blank, verified historical snapshot is used.",
+            key="sb_data_gov_input",
+        )
+        st.markdown("**Outbound WhatsApp Delivery Credentials**")
+        st.text_input("Twilio Account SID", value=os.getenv("TWILIO_ACCOUNT_SID", ""), type="password", key="sb_tw_sid")
+        st.text_input("Twilio Auth Token", value=os.getenv("TWILIO_AUTH_TOKEN", ""), type="password", key="sb_tw_tok")
+        st.text_input("Twilio WhatsApp From", value=os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886"), key="sb_tw_from")
+        st.text_input("CallMeBot API Key", value=os.getenv("CALLMEBOT_API_KEY", ""), type="password", key="sb_cmb_key")
 
     st.divider()
     st.caption("Live Data Connections")
@@ -705,31 +757,95 @@ with voice_col:
     st.components.v1.html(voice_html, height=100)
 
 with wa_col:
-    st.markdown("#### 📲 1-Click WhatsApp & SMS Bulletin")
-    st.caption("Formatted village bulletin ready to share with 500+ farmers via WhatsApp or 2G SMS.")
+    st.markdown("#### 📲 Outbound WhatsApp Push & Village Bulletin")
+    st.caption("Deliver real advisories directly to farmer phones via Twilio, CallMeBot webhook, or 1-click WhatsApp deep-link.")
 
-    bulletin_msg = (
-        f"🌱 *KhetSaarthi Krishi Advisory*\\n"
-        f"📍 *Location:* {place['name']}, {place.get('admin1', 'Maharashtra')}\\n"
-        f"🌾 *Crop:* {inputs.get('crop', '')} ({inputs.get('stage', '')})\\n"
-        f"⚠️ *Weather Risk:* {risk['score']}/100 ({risk.get('localized_label', '')})\\n"
-        f"🗓️ *Safe Spray Window:* {risk.get('best_spray_window', 'None')}\\n"
-        f"💧 *Irrigation Deficit:* {water_bal.get('net_irrigation_deficit_mm', 0):.1f} mm (~{water_bal.get('drip_hours_per_acre', 0):.1f} hrs drip/acre)\\n"
-        f"🛒 *Best Market:* {mandi_econ.get('best_market_name', 'APMC')} (Modal: ₹{mandi_econ.get('best_market_raw_price', 0):,.0f}/Q | Net: ₹{mandi_econ.get('best_market_net_revenue', 0):,.0f} for {lot_quintals}Q)\\n"
-        f"💰 *Spoilage VaR:* ₹{mandi_econ.get('spoilage_var_inr', 0):,.0f} ({mandi_econ.get('recommendation_code', 'SAFE')})\\n\\n"
-        f"👉 *Action:* {risk.get('actions', [''])[0]}\\n\\n"
-        f"📢 _Shared via KhetSaarthi 🌱 — Open-Meteo & AGMARKNET Decision Science._"
+    advisory_msg = format_whatsapp_advisory_message(report, language=chat_lang)
+
+    farmer_phone = st.text_input(
+        "Farmer WhatsApp Phone Number",
+        value=st.session_state.get("farmer_phone_input", "+919876543210"),
+        key="farmer_phone_input",
+        help="Format: +919876543210 or 9876543210. Real push will be sent to this recipient.",
     )
 
-    st.text_area("Copy-ready Bulletin Text", value=bulletin_msg, height=120, label_visibility="collapsed")
-    encoded_bulletin = urllib.parse.quote(bulletin_msg)
-    st.markdown(
-        f'<a href="https://wa.me/?text={encoded_bulletin}" target="_blank" style="text-decoration:none;">'
-        f'<button style="background:#25D366;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer;width:100%;box-shadow:0 2px 6px rgba(37,211,102,0.25);">'
-        f'📲 Share Bulletin to WhatsApp Group (1-Click)'
-        f'</button></a>',
-        unsafe_allow_html=True,
+    clean_num = clean_phone_number(farmer_phone)
+    wa_link = format_whatsapp_deep_link(clean_num, advisory_msg)
+
+    tw_sid = st.session_state.get("sb_tw_sid", "").strip() or os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    tw_token = st.session_state.get("sb_tw_tok", "").strip() or os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    tw_from = st.session_state.get("sb_tw_from", "").strip() or os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886").strip()
+    cmb_key = st.session_state.get("sb_cmb_key", "").strip() or os.getenv("CALLMEBOT_API_KEY", "").strip()
+
+    push_c1, push_c2 = st.columns([1, 1])
+    with push_c1:
+        send_push_btn = st.button("🚀 Send Real WhatsApp Push", type="primary", use_container_width=True)
+    with push_c2:
+        st.markdown(
+            f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+            f'<button style="background:#25D366;color:white;border:none;padding:10px 14px;border-radius:8px;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;box-shadow:0 2px 6px rgba(37,211,102,0.25);">'
+            f'💬 Open in WhatsApp (1-Click)'
+            f'</button></a>',
+            unsafe_allow_html=True,
+        )
+
+    # Optional Auto-dispatch toggle
+    auto_send = st.checkbox(
+        "⚡ Auto-Send WhatsApp Alert when Risk Score >= 15",
+        value=False,
+        key="auto_wa_toggle",
+        help="When enabled and risk is elevated (score >= 15), automatically dispatches WhatsApp alert upon report generation.",
     )
+
+    if send_push_btn:
+        with st.spinner("Dispatching outbound WhatsApp message via configured HTTP gateway..."):
+            disp_result = send_real_whatsapp_message(
+                phone_number=clean_num,
+                message=advisory_msg,
+                twilio_sid=tw_sid or None,
+                twilio_token=tw_token or None,
+                twilio_from=tw_from,
+                callmebot_api_key=cmb_key or None,
+            )
+            st.session_state["last_wa_dispatch"] = disp_result
+
+    # Handle auto-send trigger
+    if auto_send and risk.get("score", 0) >= 15:
+        report_sig = f"{place.get('name')}_{risk.get('score')}_{inputs.get('stage')}_{clean_num}"
+        if st.session_state.get("last_auto_wa_sig") != report_sig:
+            st.session_state["last_auto_wa_sig"] = report_sig
+            auto_disp = send_real_whatsapp_message(
+                phone_number=clean_num,
+                message=advisory_msg,
+                twilio_sid=tw_sid or None,
+                twilio_token=tw_token or None,
+                twilio_from=tw_from,
+                callmebot_api_key=cmb_key or None,
+            )
+            st.session_state["last_wa_dispatch"] = auto_disp
+            if auto_disp.get("sent"):
+                st.toast(f"⚡ Auto-Alert delivered to {clean_num} (Risk: {risk.get('score')}/100)!", icon="📲")
+
+    if "last_wa_dispatch" in st.session_state:
+        disp = st.session_state["last_wa_dispatch"]
+        if disp.get("sent"):
+            st.success(
+                f"✅ **WhatsApp Message Dispatched!**\n\n"
+                f"- **Gateway Provider:** `{disp.get('provider')}`\n"
+                f"- **Recipient:** `{clean_num}`\n"
+                f"- **Message SID / ID:** `{disp.get('message_sid', 'N/A')}`\n"
+                f"- **Latency:** `{disp.get('latency_ms', 0)} ms`\n"
+                f"- **Status Detail:** {disp.get('status_detail', 'Sent successfully')}"
+            )
+        else:
+            st.info(
+                f"ℹ️ **Outbound Delivery Status: {disp.get('provider', 'unconfigured').upper()}**\n\n"
+                f"{disp.get('status_detail', 'API keys not configured.')}\n\n"
+                f"👉 **Direct Delivery Ready:** Click **'💬 Open in WhatsApp (1-Click)'** above to deliver this exact advisory immediately to your phone without API keys!"
+            )
+
+    with st.expander("📝 View / Copy Formatted Bulletin Text", expanded=False):
+        st.text_area("Advisory Bulletin Content", value=advisory_msg, height=130, disabled=True)
 
 
 # --- 4. MANDI PRICE INTELLIGENCE ---
@@ -759,14 +875,38 @@ st.divider()
 st.subheader("💬 Ask KhetSaarthi (Grounded Multilingual Q&A)")
 st.caption("Ask questions about spraying windows, rainfall dates, temperature & irrigation, risk causes, or mandi rates. Zero hallucinated numbers.")
 
+# Active Conversational Engine Telemetry Badge
+active_llm_key = _get_llm_key()
+engine_info = get_active_chat_engine_info(llm_api_key=active_llm_key)
+if engine_info.get("is_llm"):
+    engine_badge = f'<span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:0.82rem;font-weight:700;">🤖 Live Grounded LLM: {str(engine_info.get("provider", "")).upper()} ({engine_info.get("model")})</span>'
+else:
+    engine_badge = f'<span style="background:#e0f2fe;color:#0369a1;padding:4px 10px;border-radius:12px;font-size:0.82rem;font-weight:700;">📐 Deterministic Grounded Engine | 100% Offline-Safe Heuristics</span>'
+
+chat_hdr_col1, chat_hdr_col2 = st.columns([4, 1])
+with chat_hdr_col1:
+    st.markdown(f"**Conversational Engine:** {engine_badge}", unsafe_allow_html=True)
+with chat_hdr_col2:
+    if st.button("🧹 Clear Chat", key="clear_chat_btn", use_container_width=True):
+        st.session_state["chat_history"] = []
+        st.rerun()
+
 # Render 1-Click Suggested Questions
 suggested = get_suggested_questions(chat_lang)
 q_cols = st.columns(len(suggested))
 for q_idx, sq in enumerate(suggested):
     with q_cols[q_idx]:
         if st.button(sq, key=f"sq_btn_{q_idx}", use_container_width=True):
+            history_before = list(st.session_state.get("chat_history", []))
             st.session_state.setdefault("chat_history", []).append({"role": "user", "content": sq})
-            ans = answer_farmer_query(sq, report, chat_lang)
+            with st.spinner("Formulating grounded response..."):
+                ans = answer_farmer_query(
+                    question=sq,
+                    report=report,
+                    language=chat_lang,
+                    chat_history=history_before,
+                    llm_api_key=active_llm_key,
+                )
             st.session_state["chat_history"].append({"role": "assistant", "content": ans})
             st.rerun()
 
@@ -777,8 +917,16 @@ for message in st.session_state.get("chat_history", []):
 
 user_question = st.chat_input("e.g. When can I spray this week? / बारिश कब होगी? / फवारणी कधी करावी?")
 if user_question:
+    history_before = list(st.session_state.get("chat_history", []))
     st.session_state.setdefault("chat_history", []).append({"role": "user", "content": user_question})
-    ans = answer_farmer_query(user_question, report, chat_lang)
+    with st.spinner("Formulating grounded response..."):
+        ans = answer_farmer_query(
+            question=user_question,
+            report=report,
+            language=chat_lang,
+            chat_history=history_before,
+            llm_api_key=active_llm_key,
+        )
     st.session_state["chat_history"].append({"role": "assistant", "content": ans})
     st.rerun()
 

@@ -1,11 +1,17 @@
-"""Grounded multilingual question router over the current live-data report.
+"""Grounded multilingual conversational engine and intent router for KhetSaarthi.
 
-This is intentionally a small deterministic intent router, not a hallucinating LLM.
-Answers are constructed only from values fetched for the current advisory session.
+Combines:
+1. Live Grounded LLM (Groq / Gemini / HuggingFace Router) conditioned on session context.
+2. 100% Deterministic Grounded Heuristic Engine (zero-dependency offline fallback).
 """
 from __future__ import annotations
 
+import json
+import os
+import time
 from typing import Any
+
+import requests
 
 # Intent keyword triggers across English, Hindi, and Marathi
 INTENTS: dict[str, list[str]] = {
@@ -110,8 +116,8 @@ def get_suggested_questions(language: str = "en") -> list[str]:
     return questions.get(language, questions["en"])
 
 
-def answer_farmer_query(question: str, report: dict[str, Any] | None, language: str = "en") -> str:
-    """Ground farmer queries against fetched session data without hallucination."""
+def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | None, language: str = "en") -> str:
+    """Deterministic, rule-based grounded reply builder for zero-hallucination offline operation."""
     if not report:
         return REPLIES.get(language, REPLIES["en"])["no_report"]
     lang = language if language in REPLIES else "en"
@@ -263,3 +269,261 @@ def answer_farmer_query(question: str, report: dict[str, Any] | None, language: 
         stage=risk.get("stage", "Stage"),
         actions=actions,
     )
+
+
+def resolve_llm_config(
+    llm_api_key: str | None = None,
+    llm_provider: str | None = None,
+) -> tuple[str, str, str, str] | None:
+    """Resolve (provider_name, endpoint, model, api_key) in priority order:
+
+    1. Groq (GROQ_API_KEY) -> llama-3.3-70b-versatile
+    2. Google Gemini (GEMINI_API_KEY) -> gemini-2.5-flash
+    3. Hugging Face (HF_TOKEN / HUGGINGFACE_API_KEY) -> Qwen/Qwen2.5-72B-Instruct
+    Returns None if no LLM key is configured.
+    """
+    # 1. Explicit passed key
+    if llm_api_key and llm_api_key.strip():
+        clean_key = llm_api_key.strip()
+        prov = (llm_provider or "").strip().lower()
+        if prov == "gemini" or clean_key.startswith("AIza"):
+            return (
+                "Google Gemini",
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                "gemini-2.5-flash",
+                clean_key,
+            )
+        if prov in ("huggingface", "hf") or clean_key.startswith("hf_"):
+            return (
+                "Hugging Face",
+                "https://router.huggingface.co/v1/chat/completions",
+                "Qwen/Qwen2.5-72B-Instruct",
+                clean_key,
+            )
+        # Default to Groq compatible
+        return (
+            "Groq",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "llama-3.3-70b-versatile",
+            clean_key,
+        )
+
+    # 2. Check environment / st.secrets
+    def _get_secret(key_name: str) -> str:
+        ev = os.getenv(key_name, "").strip()
+        if ev:
+            return ev
+        try:
+            import streamlit as st
+            return str(st.secrets.get(key_name, "")).strip()
+        except Exception:
+            return ""
+
+    groq_key = _get_secret("GROQ_API_KEY")
+    if groq_key:
+        return (
+            "Groq",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "llama-3.3-70b-versatile",
+            groq_key,
+        )
+
+    gemini_key = _get_secret("GEMINI_API_KEY")
+    if gemini_key:
+        return (
+            "Google Gemini",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "gemini-2.5-flash",
+            gemini_key,
+        )
+
+    hf_key = _get_secret("HF_TOKEN") or _get_secret("HUGGINGFACE_API_KEY")
+    if hf_key:
+        return (
+            "Hugging Face",
+            "https://router.huggingface.co/v1/chat/completions",
+            "Qwen/Qwen2.5-72B-Instruct",
+            hf_key,
+        )
+
+    return None
+
+
+def get_active_chat_engine_info(llm_api_key: str | None = None) -> dict[str, Any]:
+    """Return telemetry info about the currently active conversational engine."""
+    config = resolve_llm_config(llm_api_key)
+    if config:
+        prov, _, model, _ = config
+        return {
+            "provider": prov,
+            "model": model,
+            "badge": f"🤖 Live Grounded LLM ({prov})",
+            "is_llm": True,
+        }
+    return {
+        "provider": "Deterministic Heuristic",
+        "model": "Rule-Based Grounded Engine",
+        "badge": "📐 Deterministic Grounded Engine",
+        "is_llm": False,
+    }
+
+
+def build_grounded_system_prompt(report: dict[str, Any], language: str = "en") -> str:
+    """Serialize full advisory session context into a structured, strict prompt."""
+    place = report.get("location", {})
+    risk = report.get("risk", {})
+    mandi = report.get("mandi", {})
+    econ_water = report.get("economics_and_water", {})
+    mandi_econ = econ_water.get("mandi_arbitrage", {})
+    water_bal = econ_water.get("water_balance", {})
+
+    lang_instructions = {
+        "mr": "उत्तर फक्त अस्खलित, आदरातिथ्यपूर्ण आणि सोप्या मराठीत द्या (मराठी लिपी / Devanagari). शेतकरी बांधवांना समजेल अशी सोपी भाषा वापरा.",
+        "hi": "उत्तर केवल शुद्ध, सम्मानजनक और व्यावहारिक हिंदी में दें (देवनागरी लिपि)। किसान भाइयों के अनुकूल सीधी और सरल भाषा का प्रयोग करें।",
+        "en": "Respond in clear, empathetic, and professional English suitable for Indian agricultural decision-makers.",
+    }.get(language, "Respond in clear English.")
+
+    # Format 7-day spray calendar
+    schedule = risk.get("spray_schedule", [])
+    schedule_summary = "\n".join(
+        f"  - {d.get('date')}: [{d.get('status')}] Rain={d.get('rain_mm', 0)}mm, Prob={d.get('rain_prob', 0)}%, Wind={d.get('wind_kmh', 0)}km/h | Reason: {d.get('reason', '')}"
+        for d in schedule
+    )
+
+    # Format 7-day weather rows
+    rows = risk.get("forecast_rows", [])
+    forecast_summary = "\n".join(
+        f"  - {r.get('Date')}: Rain={r.get('Rain (mm)', 0)}mm, Prob={r.get('Rain probability (%)', 0)}%, MaxTemp={r.get('Max temp (°C)', 0)}°C, MinTemp={r.get('Min temp (°C)', 0)}°C, Wind={r.get('Wind (km/h)', 0)}km/h, ET0={r.get('Reference ET₀ (mm)', 'N/A')}mm"
+        for r in rows
+    )
+
+    # Format Mandi rows
+    mandi_status = mandi.get("status", "unconfigured")
+    mandi_recs = mandi.get("records", [])
+    if mandi_recs:
+        mandi_text = f"Status: {mandi_status}\n" + "\n".join(
+            f"  - {m.get('Market')} ({m.get('District')}): Modal ₹{m.get('Modal price (₹/quintal)')}/Q, Min ₹{m.get('Min price (₹/quintal)')}, Max ₹{m.get('Max price (₹/quintal)')}, Date: {m.get('Date', 'N/A')}, Variety: {m.get('Variety', 'Standard')}"
+            for m in mandi_recs[:5]
+        )
+    else:
+        mandi_text = f"Status: {mandi_status} (Live government AGMARKNET prices currently busy or unconfigured)."
+
+    prompt = f"""You are KhetSaarthi (खेतसारथी / शेतसारथी 🌱), an expert AI agronomist and agricultural risk advisor for Indian farmers.
+
+{lang_instructions}
+
+### CURRENT FARM ADVISORY SESSION CONTEXT (GROUND TRUTH):
+- Location: {place.get('name')}, {place.get('admin2')}, {place.get('admin1')} (Lat: {place.get('latitude')}, Lon: {place.get('longitude')})
+- Crop: {risk.get('crop')} | Growth Stage: {risk.get('stage')}
+- Weather Risk Index: {risk.get('score')}/100 ({risk.get('label')}, Localized: {risk.get('localized_label')})
+- Optimal Spray Window: {risk.get('best_spray_window', 'None detected')}
+- Active Alerts: {[a.get('fact') for a in risk.get('alerts', [])]}
+- Prioritized Action Plan: {risk.get('actions', [])}
+
+### 7-DAY AGMARKNET SPRAY SUITABILITY CALENDAR:
+{schedule_summary}
+
+### 7-DAY OPEN-METEO WEATHER FORECAST:
+{forecast_summary}
+
+### MARKET & ARBITRAGE INTELLIGENCE:
+{mandi_text}
+- Top Net Market: {mandi_econ.get('best_market_name')} (Net Price: ₹{mandi_econ.get('best_market_net_price')}/Q, Dist: {mandi_econ.get('best_market_distance_km')} km)
+- Weather Spoilage VaR: ₹{mandi_econ.get('spoilage_var_inr')} at risk ({mandi_econ.get('spoilage_risk_pct')}%) | Action: {mandi_econ.get('recommendation_code')}
+
+### FAO-56 CROP WATER BALANCE & PRECISION IRRIGATION:
+- Crop Kc: {water_bal.get('kc')} | 7-Day ETc Demand: {water_bal.get('total_etc_mm')} mm | Effective Rain: {water_bal.get('effective_rain_mm')} mm
+- Net Irrigation Deficit: {water_bal.get('net_irrigation_deficit_mm')} mm (~{water_bal.get('drip_hours_per_acre')} hours drip irrigation/acre)
+- Verdict: {water_bal.get('localized_verdict')}
+
+### STRICT BEHAVIORAL GUARDRAILS:
+1. Always ground your facts strictly in the session context above.
+2. NEVER hallucinate or invent rainfall amounts, temperatures, or mandi prices.
+3. If asked about spraying, always cite the exact SAFE dates and AVOID dates with reasons.
+4. If asked about mandi prices and data is missing/busy, honestly state that live government prices are unavailable right now.
+5. Answer questions about pest risks, water timing, fertilizer/spray windows, and harvest timing logically using the live weather facts.
+6. Format your answer with clear markdown bullet points and bold highlights for dates and numbers. Keep responses practical and actionable.
+"""
+    return prompt
+
+
+def call_llm_chat(
+    question: str,
+    report: dict[str, Any],
+    language: str,
+    chat_history: list[dict[str, str]] | None = None,
+    api_key: str | None = None,
+    provider: str | None = None,
+) -> str | None:
+    """Invoke the active LLM provider with grounded system prompt & conversation memory."""
+    config = resolve_llm_config(api_key, provider)
+    if not config:
+        return None
+
+    prov, endpoint, model, resolved_key = config
+    system_prompt = build_grounded_system_prompt(report, language)
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+
+    if chat_history:
+        for msg in chat_history[-6:]:  # Keep recent 3 turns of memory
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": question})
+
+    headers = {
+        "Authorization": f"Bearer {resolved_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": 800,
+    }
+
+    try:
+        resp = requests.post(endpoint, json=payload, headers=headers, timeout=8.0)
+        if resp.ok:
+            data = resp.json()
+            choices = data.get("choices", [])
+            if choices and choices[0].get("message", {}).get("content"):
+                return choices[0]["message"]["content"].strip()
+        return None
+    except Exception:
+        return None
+
+
+def answer_farmer_query(
+    question: str,
+    report: dict[str, Any] | None,
+    language: str = "en",
+    chat_history: list[dict[str, str]] | None = None,
+    llm_api_key: str | None = None,
+    llm_provider: str | None = None,
+) -> str:
+    """Ground farmer queries against live session data.
+
+    Attempts real LLM reasoning first if an API key is configured.
+    Automatically degrades to deterministic heuristic builder on failure or in offline tests.
+    """
+    if not report:
+        return REPLIES.get(language, REPLIES["en"])["no_report"]
+
+    # 1. Attempt LLM Grounded Generation
+    llm_answer = call_llm_chat(
+        question=question,
+        report=report,
+        language=language,
+        chat_history=chat_history,
+        api_key=llm_api_key,
+        provider=llm_provider,
+    )
+    if llm_answer and len(llm_answer) > 15:
+        return llm_answer
+
+    # 2. Deterministic Fallback Builder (preserves 100% test contract)
+    return _deterministic_answer_farmer_query(question=question, report=report, language=language)
