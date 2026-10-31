@@ -14,9 +14,9 @@ RISK_LABELS = {
 }
 
 SPRAY_STATUS_LABELS = {
-    "en": {"SAFE": "Safe to Spray", "CAUTION": "Exercise Caution", "AVOID": "Avoid Spraying"},
-    "hi": {"SAFE": "छिड़काव के लिए सुरक्षित", "CAUTION": "सावधानी बरतें", "AVOID": "छिड़काव से बचें"},
-    "mr": {"SAFE": "फवारणीसाठी सुरक्षित", "CAUTION": "काळजीपूर्वक फवारणी करा", "AVOID": "फवारणी टाळा"},
+    "en": {"SAFE": "Safe to Spray", "CAUTION": "Exercise Caution", "AVOID": "Avoid Spraying", "UNKNOWN": "Unknown due to Missing Info"},
+    "hi": {"SAFE": "छिड़काव के लिए सुरक्षित", "CAUTION": "सावधानी बरतें", "AVOID": "छिड़काव से बचें", "UNKNOWN": "जानकारी के अभाव में अज्ञात"},
+    "mr": {"SAFE": "फवारणीसाठी सुरक्षित", "CAUTION": "काळजीपूर्वक फवारणी करा", "AVOID": "फवारणी टाळा", "UNKNOWN": "माहिती अपुरी असल्याने अनिर्णीत"},
 }
 
 ALERT_TITLES = {
@@ -139,11 +139,16 @@ def compute_spray_suitability(
     schedule: list[dict[str, Any]] = []
 
     for i, day in enumerate(dates):
-        r = rain[i] if (i < len(rain) and rain[i] is not None) else 0.0
-        p = rain_prob[i] if (i < len(rain_prob) and rain_prob[i] is not None) else 0.0
-        w = wind[i] if (i < len(wind) and wind[i] is not None) else 0.0
+        r = rain[i] if (i < len(rain)) else None
+        p = rain_prob[i] if (i < len(rain_prob)) else None
+        w = wind[i] if (i < len(wind)) else None
 
-        if r >= 5.0 or p >= 70.0 or w >= 20.0:
+        if r is None or p is None or w is None:
+            status = "UNKNOWN"
+            reason_en = "Missing weather variable; drift or rain risk cannot be certified"
+            reason_hi = "मौसम डेटा अपूर्ण; दवा बहने या उड़ने का जोखिम प्रमाणित नहीं किया जा सकता"
+            reason_mr = "हवामान माहिती अपुरी; वारा किंवा पावसाचा धोका पडताळता येत नाही"
+        elif r >= 5.0 or p >= 70.0 or w >= 20.0:
             status = "AVOID"
             if p >= 70.0:
                 reason_en = f"High rain chance ({p:.0f}%, {r:.1f}mm rain)"

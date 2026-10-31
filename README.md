@@ -10,47 +10,39 @@ KhetSaarthi bridges the gap between fragmented meteorological data and volatile 
 
 ## 🌟 Key Technical Capabilities
 
-1. **Smart Geocoding Fallback (`core/sources.py`):**
+1. **Decoupled Agronomic Engines (Irrigation vs. Foliar Pesticide Spraying):**
+   - **Agricultural Water Management (`core/irrigation.py`):** Dedicated root-zone water balance strictly grounded in FAO-56 Penman-Monteith methodology. Calculates crop evapotranspiration ($\text{ET}_c = \text{ET}_0 \times K_c$), discounts effective rainfall ($P_{\text{eff}}$), accounts for soil texture (Black Cotton Vertisol, Loamy, Sandy), and incorporates farmer-observed moisture (`dry`, `moist`, `wet`). Avoids universal 2-day delay rules and never calculates pump run-time without emitter discharge specs. Statuses: `IRRIGATION MAY BE NEEDED`, `DEFER AND RECHECK`, `MONITOR SOIL MOISTURE`, `INSUFFICIENT DATA`.
+   - **Pesticide Spray Weather Suitability (`core/pesticide_spray.py`):** Atmospheric canopy evaluation for wind drift ($<15$ km/h), rain wash-off, and thermal inversion. Strictly complies with statutory CIBRC (Central Insecticides Board & Registration Committee) label claims. Prohibits fabricated chemical dosages or generic "SAFE TO SPRAY" guarantees. Statuses: `SUITABLE WEATHER WINDOW`, `CAUTION WINDOW`, `AVOID SPRAYING`, `UNKNOWN DUE TO MISSING INFORMATION`.
+   - **Crop Agronomy Registry (`core/crop_config.py`):** 10 supported crops with verified FAO-56 Table 12 $K_c$ parameters across 4 growth stages, FAO-33 yield response factor $K_y$, stage warnings (critical pollinator window during bloom, statutory PHI before harvest), and statutory CIBRC registration database.
+2. **7-Day Dual Operational Calendar (`app.py`):**
+   - Two distinct, side-by-side comparative rows:
+     - 💧 **Row 1: Root-Zone Irrigation Need** (FAO-56 $\text{ET}_c$ vs. effective rainfall and soil capacity).
+     - 🌿 **Row 2: Foliar Pesticide Spray Weather** (Wind drift, rain wash-off risk, and max temperature).
+   - Zero confusion between irrigating soil roots and spraying chemical dilutions on leaves.
+3. **Smart Geocoding Fallback (`core/sources.py`):**
    - Resolves Indian place names via Open-Meteo & GeoNames.
    - Compound query parsing: splits compound strings (e.g. `"Lasalgaon, Nashik"`, `"Baramati, MH"`) to retry primary place tokens and score candidates matching state/district hints and population.
-2. **Fast-Timeout AGMARKNET Adapter with District-to-State Fallback (`core/sources.py`):**
+4. **Fast-Timeout AGMARKNET Adapter with District-to-State Fallback (`core/sources.py`):**
    - Connects to `data.gov.in` daily wholesale mandi feed.
    - Enforces a **4.5-second strict timeout** and 1 retry to guarantee sub-3-second live demo performance.
    - Attempts district-level matching first; if 0 records exist, automatically falls back to state-level aggregation (`query_level="state"`).
    - Catches server timeouts or `"Resource lists"` busy responses cleanly without unhandled exceptions.
-3. **Deterministic Crop-Stage Sensitivity Matrix (`core/risk_engine.py`):**
+5. **Deterministic Crop-Stage Sensitivity Matrix (`core/risk_engine.py`):**
    - Transparent 0–100 heuristic risk index evaluating heavy rain (≥50mm), heat stress (≥36°C / 40°C), wind drift (≥35 km/h), and 3-day short dry spells.
    - **`flowering_wet_stress`**: Flags flower drop, cloud stress, and fungal/blight risks during flowering stages (Soybean, Cotton, Tur, Onion, Tomato) when rain probability ≥70% or multi-day rain ≥10mm.
    - **`harvest_wet_risk`**: Flags mold, pod rotting, and bulb discoloration risks during harvest/maturity when unseasonal rain is detected.
-4. **7-Day Spray & Field-Work Suitability Schedule (`core/risk_engine.py`):**
-   - Computes daily agronomic operational status:
-     - `❌ AVOID`: Rain ≥ 5.0mm, rain probability ≥ 70%, or wind speed ≥ 20.0 km/h.
-     - `⚠️ CAUTION`: Rain ≥ 1.5mm, rain probability ≥ 45%, or wind speed ≥ 15.0 km/h.
-     - `✅ SAFE`: Calm, dry window suitable for pesticide or foliar application.
-   - Fully localized status badges and reasons in English, Hindi, and Marathi.
-5. **Grounded Multilingual Conversational Engine (`core/chat.py`):**
+6. **Grounded Multilingual Conversational Engine (`core/chat.py`):**
    - **Live Grounded LLM (RAG):** Multi-provider support for **Groq** (`llama-3.3-70b-versatile`), **Google Gemini** (`gemini-2.5-flash`), and **Hugging Face** (`Qwen/Qwen2.5-72B-Instruct`).
-   - Grounded strictly against the live session report payload (weather forecast, spray schedule, risk alerts, mandi rates, economics, water balance) to prevent hallucinations.
-   - Multi-turn conversation memory (`chat_history`) supporting nuanced, contextual farmer queries in Marathi, Hindi, and English.
-   - **Deterministic Fallback:** If no LLM key is configured, seamlessly falls back to the deterministic grounded intent engine (100% offline-safe).
-   - Provides 4 natural 1-click suggested question prompts per language for instant exploration.
-6. **Outbound Messaging & Village Bulletin (`core/messaging.py`):**
+   - Grounded strictly against the live session report payload (weather forecast, irrigation schedule, spray schedule, risk alerts, mandi rates, economics) to prevent hallucinations.
+   - Token-aware intent router distinguishing greetings, irrigation questions, foliar spray weather, rain dates, heat, and mandi prices, with helpful agronomic fallback for general queries.
+7. **Outbound Messaging & Village Bulletin (`core/messaging.py`):**
    - **Real Outbound WhatsApp API Push:** Dispatches real HTTP requests to deliver messages directly to farmer phones via **Twilio WhatsApp API**, **CallMeBot Personal Webhook**, or **Meta Cloud API**.
    - **Direct 1-Click WhatsApp Launcher:** Zero-credential deep-link (`https://wa.me/<phone>?text=...`) for instant 1-tap sharing on WhatsApp Web or mobile app.
-   - **Automated Dispatch:** Configurable auto-alert dispatching when Weather Risk Score $\ge 15$.
-7. **Decision Science & Agricultural Economics (`core/economics.py`):**
+8. **Decision Science & Agricultural Economics (`core/economics.py`):**
    - **Spatial Mandi Arbitrage:** Haversine × 1.25 road distance calculation with freight deduction (`₹1.50/Q/km`), ranking markets by **Net Take-Home Revenue (₹)**.
    - **Weather Spoilage Value-at-Risk (VaR in ₹):** Quantifies financial loss for configurable lot sizes (5–100 Q) if harvest produce faces unseasonal rain or extreme weather.
-   - **FAO-56 Precision Irrigation:** Implements $\text{ET}_c = K_c \times \text{ET}_0$ against effective rainfall ($P_{\text{eff}} = 0.80 \times \text{Rain}$), calculating net moisture deficit (mm), liters/acre, and drip pump run-time (hours/acre).
    - **Counterfactual Weather Stress-Test Simulator:** Allows judges to simulate +Rain, +Heat, or +Wind deltas live on stage with an isolated deep-copy modifier.
    - **Zero-Dependency Multilingual Voice Advisory:** Browser-native speech synthesis speaking localized advisories aloud in Marathi (`mr-IN`), Hindi (`hi-IN`), and English (`en-IN`).
-8. **Executive Streamlit Decision Dashboard (`app.py`):**
-   - **1-Click Judge Demo Presets** for instant live evaluation (`Nashik`, `Latur`, `Lasalgaon`).
-   - Executive 4-metric KPI summary strip + Economic & Water Balance Cards.
-   - Responsive 7-day visual spray suitability card strip.
-   - Multi-turn chat interface with live conversational engine telemetry badge.
-   - Plotly forecast charts with decision threshold reference lines (5mm rain avoid line, 36°C heat watch, 20 km/h spray drift limit).
-   - Autonomous execution trace showing step-by-step latency in milliseconds and verification evidence.
 
 ---
 
@@ -168,7 +160,7 @@ streamlit run app.py
 
 ## 🧪 Automated Testing & Verification
 
-The project includes 39 automated, offline-safe unit tests in `tests/`:
+The project includes 51 automated, offline-safe unit tests in `tests/`:
 
 ```powershell
 python -m pytest -v
@@ -176,15 +168,16 @@ python -m pytest -v
 
 ```text
 ============================= test session starts =============================
-collected 39 items
+collected 51 items
 
-tests\test_chat_and_messaging.py ........                                [ 20%]
-tests\test_phase3_risk_and_chat.py .........                             [ 43%]
-tests\test_phase45_innovations.py .......                                [ 61%]
-tests\test_risk_engine.py .....                                          [ 74%]
+tests\test_chat_and_messaging.py ........                                [ 15%]
+tests\test_irrigation_and_pesticide.py ............                      [ 39%]
+tests\test_phase3_risk_and_chat.py .........                             [ 56%]
+tests\test_phase45_innovations.py .......                                [ 70%]
+tests\test_risk_engine.py .....                                          [ 80%]
 tests\test_sources_and_agent.py ..........                               [100%]
 
-============================= 39 passed in 1.72s ==============================
+============================= 51 passed in 4.88s ==============================
 ```
 
 To run the live external API smoke test (requires network access):

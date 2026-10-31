@@ -15,6 +15,10 @@ import requests
 
 # Intent keyword triggers across English, Hindi, and Marathi
 INTENTS: dict[str, list[str]] = {
+    "greeting": [
+        "hi", "hello", "hey", "namaste", "greetings", "good morning", "good afternoon", "hlo",
+        "नमस्कार", "नमस्ते", "राम राम", "सुप्रभात", "प्रणाम", "हाय", "हॅलो",
+    ],
     "spray": [
         "spray", "spraying", "pesticide", "foliar", "chemical", "insecticide", "fungicide",
         "field work", "fieldwork", "when to spray", "best day to spray",
@@ -53,6 +57,7 @@ INTENTS: dict[str, list[str]] = {
 
 REPLIES: dict[str, dict[str, str]] = {
     "en": {
+        "greeting": "Hello! I am KhetSaarthi 🌱, your agricultural decision-support assistant. How can I help you today? You can ask me: 'When should I irrigate my crop?', 'Is it weather-suitable to spray pesticide?', 'When will it rain?', or 'What is the current mandi rate?'",
         "no_report": "Run a farm analysis first so I can answer using live weather data for your location.",
         "rain": "The forecast's highest daily rainfall is **{amount:.1f} mm** on **{date}**. {probability} Total 7-day cumulative rainfall is **{cum_rain:.1f} mm**. Check field drainage and avoid applying inputs immediately before rain. Forecasts can change, so recheck before acting.",
         "heat": "The forecast maximum temperature over the next seven days is **{temp:.1f} °C** (minimum: **{min_temp:.1f} °C**). Check soil moisture and, where irrigation is available, prefer cooler morning/evening hours. This is not a crop-specific water prescription.",
@@ -62,9 +67,10 @@ REPLIES: dict[str, dict[str, str]] = {
         "water": "The forecast reference ET₀ maximum is **{et0}** with total forecast rainfall of **{cum_rain:.1f} mm**. ET₀ describes water demand for a well-watered grass reference surface, not your crop's exact irrigation requirement. Check actual soil moisture and local irrigation guidance before watering. {dry}",
         "harvest": "The forecast shows **{amount:.1f} mm** as the highest daily rainfall over the next seven days ({date}). For harvest-stage decisions, use a suitable dry window and protect harvested produce from rain; verify the forecast again before scheduling.",
         "summary": "The current weather-risk index is **{score}/100 ({label})** for **{crop}**, at the **{stage}** stage. The index is a transparent heuristic, not a probability of crop loss. Recommended actions: {actions}",
-        "fallback": "I can answer questions about spraying windows, rain forecasts, heat & irrigation, risk score reasons, harvest timing, and government mandi prices using this session's live data. Try asking about one of those topics.",
+        "fallback": "I am KhetSaarthi 🌱, an agricultural decision-support assistant. I specialize in farm irrigation planning, pesticide weather suitability, crop stage risks, and mandi prices. Try asking: 'When should I irrigate?', 'When is it suitable to spray?', or 'When will it rain?'",
     },
     "hi": {
+        "greeting": "नमस्ते! मैं खेतसारथी 🌱 हूँ — आपका कृषि जोखिम, सिंचाई नियोजन और मंडी परामर्श सहायक। आज मैं आपकी क्या सहायता कर सकता हूँ? आप पूछ सकते हैं: 'सिंचाई कब करें?', 'कीटनाशक छिड़काव का अनुकूल दिन कौन सा है?', 'बारिश कब होगी?' या 'मंडी भाव क्या है?'",
         "no_report": "पहले खेत का विश्लेषण चलाएँ, ताकि मैं आपके स्थान के लाइव मौसम के आधार पर जवाब दे सकूँ।",
         "rain": "अगले सात दिनों में अधिकतम दैनिक बारिश **{amount:.1f} मिमी** {date} को अनुमानित है। {probability} कुल सात दिनों की बारिश **{cum_rain:.1f} मिमी** है। खेत की जल-निकासी जाँचें और बारिश से ठीक पहले कृषि इनपुट डालने से बचें।",
         "heat": "अगले सात दिनों का अधिकतम अनुमानित तापमान **{temp:.1f} °C** (न्यूनतम: **{min_temp:.1f} °C**) है। मिट्टी की नमी जाँचें और सिंचाई उपलब्ध हो तो सुबह जल्दी या शाम का समय चुनें। यह फसल-विशिष्ट सिंचाई मात्रा नहीं है।",
@@ -74,9 +80,10 @@ REPLIES: dict[str, dict[str, str]] = {
         "water": "पूर्वानुमान में अधिकतम संदर्भ ET₀ **{et0}** और कुल बारिश **{cum_rain:.1f} मिमी** है। ET₀ घास के संदर्भ की जल-माँग है, आपकी फसल की सटीक आवश्यकता नहीं। पानी देने से पहले खेत की वास्तविक नमी जाँचें। {dry}",
         "harvest": "अगले सात दिनों में अधिकतम दैनिक बारिश **{amount:.1f} मिमी** {date} को अनुमानित है। कटाई के लिए उपयुक्त सूखा समय चुनें और कटी उपज को बारिश से बचाएँ; समय तय करने से पहले पूर्वानुमान फिर देखें।",
         "summary": "**{crop}** की **{stage}** अवस्था के लिए मौसम जोखिम सूचकांक **{score}/100 ({label})** है। यह पारदर्शी नियमों पर आधारित सूचकांक है, फसल नुकसान की संभावना नहीं। सुझाव: {actions}",
-        "fallback": "मैं इस सत्र के लाइव डेटा से छिड़काव समय, बारिश, तापमान/सिंचाई, जोखिम स्कोर के कारण, कटाई और मंडी भाव पर जवाब दे सकता हूँ। इनमें से किसी विषय पर पूछें।",
+        "fallback": "मैं खेतसारथी 🌱 हूँ — आपका कृषि निर्णय-सहायक। मैं फसल सिंचाई योजना, कीटनाशक छिड़काव मौसम, फसल जोखिम और मंडी भाव की जानकारी देता हूँ। आप पूछ सकते हैं: 'सिंचाई कब करें?', 'छिड़काव कब करें?', या 'मंडी भाव क्या है?'",
     },
     "mr": {
+        "greeting": "नमस्कार! मी खेतसारथी 🌱 — आपला शेती जोखीम, सिंचन नियोजन आणि बाजारभाव सहाय्यक. मी आज तुम्हाला कशी मदत करू शकतो? आपण मला विचारू शकता: 'शेतात पाणी कधी द्यावे?', 'कीटकनाशक फवारणीस अनुकूल दिवस कोणता?', 'पाऊस कधी पडेल?' किंवा 'बाजारभाव काय आहे?'",
         "no_report": "तुमच्या ठिकाणचा ताजा हवामान डेटा वापरून उत्तर देण्यासाठी आधी शेताचे विश्लेषण चालवा.",
         "rain": "पुढील सात दिवसांतील सर्वाधिक दैनिक पाऊस **{amount:.1f} मिमी** {date} रोजी अपेक्षित आहे. {probability} सात दिवसांचा एकूण अपेक्षित पाऊस **{cum_rain:.1f} मिमी** आहे. शेतातील निचरा तपासा आणि पावसाच्या अगोदर निविष्ठा देणे टाळा.",
         "heat": "पुढील सात दिवसांतील कमाल तापमान **{temp:.1f} °C** (किमान: **{min_temp:.1f} °C**) आहे. जमिनीतील ओलावा तपासा; सिंचन शक्य असल्यास सकाळी लवकर किंवा संध्याकाळी करा. हे पिकासाठी अचूक सिंचन प्रमाण नाही.",
@@ -86,7 +93,7 @@ REPLIES: dict[str, dict[str, str]] = {
         "water": "अंदाजातील कमाल संदर्भ ET₀ **{et0}** आणि एकूण अपेक्षित पाऊस **{cum_rain:.1f} मिमी** आहे. ET₀ हा संदर्भ पृष्ठभागाचा जलवापर आहे; तुमच्या पिकाची अचूक सिंचन गरज नाही. पाणी देण्यापूर्वी जमिनीतील ओलावा तपासा. {dry}",
         "harvest": "पुढील सात दिवसांत सर्वाधिक दैनिक पाऊस **{amount:.1f} मिमी** {date} रोजी अपेक्षित आहे. काढणीसाठी योग्य कोरडा कालावधी निवडा आणि काढलेले पीक पावसापासून सुरक्षित ठेवा; नियोजनापूर्वी अंदाज पुन्हा तपासा.",
         "summary": "**{crop}** पिकाच्या **{stage}** अवस्थेसाठी हवामान जोखीम निर्देशांक **{score}/100 ({label})** आहे. हा पारदर्शक नियमांवर आधारित निर्देशांक आहे; पीक नुकसानीची शक्यता नाही. कृती: {actions}",
-        "fallback": "या सत्रातील थेट डेटावरून मी फवारणीचे दिवस, पाऊस, तापमान/सिंचन, जोखीम स्कोरचे कारण, काढणी आणि मंडई भावांबद्दल उत्तर देऊ शकतो. यापैकी प्रश्न विचारा.",
+        "fallback": "मी खेतसारथी 🌱 आहे — आपला कृषी सल्लागार. मी शेतातील सिंचन नियोजन, कीटकनाशक फवारणी हवामान अनुकूलता, पीक जोखीम आणि बाजारभाव याबद्दल मार्गदर्शन करतो. आपण विचारू शकता: 'पाणी कधी द्यावे?', 'फवारणी कधी करावी?' किंवा 'बाजारभाव काय आहे?'",
     },
 }
 
@@ -125,12 +132,26 @@ def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | N
     if not q:
         return REPLIES[lang]["fallback"]
 
-    # Match intent based on priority order: spray, risk, water, rain, heat, market, harvest
+    import re
+
+    # Match agricultural domain intents first (matching phrases or words)
+    agri_intents = ["spray", "risk", "water", "rain", "heat", "market", "harvest"]
     intent: str | None = None
-    for name in ["spray", "risk", "water", "rain", "heat", "market", "harvest"]:
+    for name in agri_intents:
         if any(w in q for w in INTENTS[name]):
             intent = name
             break
+
+    # If no agricultural intent matched, check for standalone greeting words/phrases
+    if intent is None:
+        q_words = set(re.findall(r"[\w]+", q))
+        # Direct word match or exact greeting phrase
+        if any(w in q_words for w in INTENTS["greeting"]) or any(p in q for p in ["good morning", "good afternoon", "राम राम"]):
+            intent = "greeting"
+
+    # GREETING INTENT
+    if intent == "greeting":
+        return REPLIES[lang]["greeting"]
 
     risk = report.get("risk", {})
     rows = risk.get("forecast_rows", [])
@@ -168,6 +189,28 @@ def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | N
 
     # INTENT 1: SPRAYING & FIELDWORK TIMING
     if intent == "spray":
+        pest_engine = report.get("pesticide_spray", {})
+        if pest_engine and pest_engine.get("overall_verdict"):
+            label_info = pest_engine.get("label_evaluation", {})
+            stage_warn = pest_engine.get("stage_warning", "")
+            base_ans = pest_engine["overall_verdict"]
+            extra: list[str] = []
+            if label_info.get("advisory_message"):
+                extra.append(f"📋 {label_info['advisory_message']}")
+            if stage_warn:
+                extra.append(f"⚠️ {stage_warn}")
+            sep_note = (
+                "\n\n*(Note: Pesticide weather suitability assesses foliar chemical application on leaves, separate from root water irrigation.)*"
+                if lang == "en"
+                else (
+                    "\n\n*(नोट: कीटनाशक मौसम उपयुक्तता केवल पत्तियों पर दवा छिड़काव के लिए है, मिट्टी की सिंचाई से इसका कोई संबंध नहीं है।)*"
+                    if lang == "hi"
+                    else "\n\n*(टीप: कीटकनाशक हवामान अनुकूलता केवळ पानांवरील फवारणीसाठी आहे, जमिनीच्या सिंचनाशी याचा संबंध नाही.)*"
+                )
+            )
+            details = ("\n\n".join(extra) + "\n\n") if extra else ""
+            return f"🌿 **Pesticide Weather Advisory:** {base_ans}\n\n{details}{sep_note}"
+
         schedule = risk.get("spray_schedule", [])
         safe_days = [d["date"] for d in schedule if d.get("status") == "SAFE"]
         avoid_days = [f"**{d['date']}** ({d.get('reason', '')})" for d in schedule if d.get("status") == "AVOID"]
@@ -223,6 +266,19 @@ def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | N
 
     # INTENT 5: WATER / IRRIGATION
     if intent == "water":
+        irr = report.get("irrigation", {})
+        if irr and irr.get("overall_verdict"):
+            disclaimer_tag = (
+                "\n\n*(Note: Agricultural water management applies to soil and root irrigation, completely separate from pesticide spraying on leaves.)*"
+                if lang == "en"
+                else (
+                    "\n\n*(नोट: सिंचाई का संबंध मिट्टी और जड़ों में पानी देने से है, पत्तियों पर कीटनाशक छिड़काव से यह बिल्कुल अलग है।)*"
+                    if lang == "hi"
+                    else "\n\n*(टीप: शेतातील सिंचनाचा संबंध जमिनीला आणि मुळांना पाणी देण्याशी आहे, पानांवरील औषध फवारणीपेक्षा ही पूर्णपणे वेगळी प्रक्रिया आहे.)*"
+                )
+            )
+            return f"💧 **Irrigation Planning Advisory:** {irr['overall_verdict']}{disclaimer_tag}"
+
         et0_text = f"{highest_et0:.1f} mm/day" if highest_et0 is not None else ("not available" if lang == "en" else ("उपलब्ध नहीं" if lang == "hi" else "उपलब्ध नाही"))
         has_dry = any(a["type"] == "dry" for a in risk.get("alerts", []))
         if lang == "en":
@@ -260,7 +316,11 @@ def _deterministic_answer_farmer_query(question: str, report: dict[str, Any] | N
             return badge_text + base_reply
         return base_reply
 
-    # DEFAULT FALLBACK SUMMARY
+    # OUT-OF-DOMAIN / GENERAL FALLBACK
+    if intent is None:
+        return REPLIES[lang]["fallback"]
+
+    # DEFAULT SUMMARY (when explicitly asked for overview)
     actions = " ".join(risk.get("actions", [])[:2])
     return REPLIES[lang]["summary"].format(
         score=risk.get("score", 0),

@@ -25,17 +25,30 @@ from core.chat import (
     get_active_chat_engine_info,
     get_suggested_questions,
 )
+from core.crop_config import (
+    CROP_AGRONOMY_REGISTRY,
+    IRRIGATION_METHODS,
+    SOIL_MOISTURE_STATES,
+    SUPPORTED_CROPS,
+    SUPPORTED_SOIL_TYPES,
+    get_crop_config,
+    get_kc,
+    get_ky,
+    get_cibrc_label,
+)
 from core.economics import (
     apply_weather_stress_deltas,
     compute_crop_water_balance,
     evaluate_mandi_arbitrage_and_hold_risk,
 )
+from core.irrigation import plan_7day_irrigation_schedule
 from core.messaging import (
     clean_phone_number,
     format_whatsapp_advisory_message,
     format_whatsapp_deep_link,
     send_real_whatsapp_message,
 )
+from core.pesticide_spray import assess_pesticide_weather_suitability, verify_pesticide_label
 from core.risk_engine import assess_weather_risk
 from core.sources import COMMODITY_MAP
 
@@ -95,6 +108,14 @@ st.markdown("""
   .badge-safe {background: #dcfce7; color: #15803d; font-weight: 700; padding: 3px 6px; border-radius: 6px; font-size: 0.74rem;}
   .badge-caution {background: #fef3c7; color: #b45309; font-weight: 700; padding: 3px 6px; border-radius: 6px; font-size: 0.74rem;}
   .badge-avoid {background: #fee2e2; color: #b91c1c; font-weight: 700; padding: 3px 6px; border-radius: 6px; font-size: 0.74rem;}
+  .badge-irr-need {background: #dbeafe; color: #1e40af; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-irr-defer {background: #fef3c7; color: #92400e; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-irr-monitor {background: #f1f5f9; color: #475569; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-irr-unknown {background: #ede9fe; color: #6b21a8; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-pest-suitable {background: #dcfce7; color: #15803d; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-pest-caution {background: #fef3c7; color: #b45309; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-pest-avoid {background: #fee2e2; color: #b91c1c; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
+  .badge-pest-unknown {background: #f1f5f9; color: #475569; font-weight: 700; padding: 2px 6px; border-radius: 5px; font-size: 0.72rem;}
   .day-metric {font-size: 0.8rem; color: #334155; margin-top: 0.25rem;}
   .day-reason {font-size: 0.72rem; color: #64748b; margin-top: 0.35rem; line-height: 1.2;}
 </style>
@@ -154,6 +175,11 @@ def _cached_run_advisory(
     mandi_commodity: str,
     mandi_api_key: str,
     lot_quintals: float = 20.0,
+    soil_texture: str = "Loamy / Medium Alluvial",
+    soil_moisture: str = "moist",
+    irrigation_method: str | None = None,
+    target_pest: str | None = None,
+    pesticide_product: str | None = None,
 ) -> dict:
     """Cache external API calls for 15 minutes to guarantee rapid demo responsiveness."""
     return run_advisory(
@@ -164,6 +190,11 @@ def _cached_run_advisory(
         mandi_commodity=mandi_commodity,
         mandi_api_key=mandi_api_key,
         lot_quintals=lot_quintals,
+        soil_texture=soil_texture,
+        soil_moisture=soil_moisture,
+        irrigation_method=irrigation_method,
+        target_pest=target_pest,
+        pesticide_product=pesticide_product,
     )
 
 
@@ -179,6 +210,11 @@ with st.sidebar:
             "crop": "Soybean",
             "stage": "Flowering",
             "lang_label": "मराठी (Marathi)",
+            "soil_texture": "Black Cotton / Clayey (Vertisol)",
+            "soil_moisture": "moist",
+            "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
+            "target_pest": "Spodoptera / Tobacco Caterpillar (Spodoptera litura)",
+            "pesticide_product": "Chlorantraniliprole 18.5% SC",
         },
         {
             "name": "🌾 Preset 2: Latur (Harvest Spoilage Risk)",
@@ -186,6 +222,11 @@ with st.sidebar:
             "crop": "Soybean",
             "stage": "Maturity / Harvest",
             "lang_label": "हिन्दी (Hindi)",
+            "soil_texture": "Black Cotton / Clayey (Vertisol)",
+            "soil_moisture": "dry",
+            "irrigation_method": "Sprinkler (तुषार सिंचन / स्प्रिंकलर)",
+            "target_pest": "None / Preventive Scouting",
+            "pesticide_product": "",
         },
         {
             "name": "🧅 Preset 3: Lasalgaon (Smart Fallback)",
@@ -193,6 +234,11 @@ with st.sidebar:
             "crop": "Onion",
             "stage": "Vegetative",
             "lang_label": "English",
+            "soil_texture": "Loamy / Medium Alluvial",
+            "soil_moisture": "moist",
+            "irrigation_method": "Drip Irrigation (ठिबक सिंचन / ड्रिप)",
+            "target_pest": "Onion Thrips (Thrips tabaci)",
+            "pesticide_product": "Spinetoram 11.7% SC",
         },
     ]
 
@@ -204,6 +250,11 @@ with st.sidebar:
             st.session_state["crop_input"] = p["crop"]
             st.session_state["stage_input"] = p["stage"]
             st.session_state["lang_input"] = p["lang_label"]
+            st.session_state["soil_texture_input"] = p["soil_texture"]
+            st.session_state["soil_moisture_input"] = p["soil_moisture"]
+            st.session_state["irr_method_input"] = p["irrigation_method"]
+            st.session_state["target_pest_input"] = p["target_pest"]
+            st.session_state["pesticide_product_input"] = p["pesticide_product"]
 
     st.divider()
     st.markdown("### 🌾 Custom Farm Details")
@@ -212,6 +263,11 @@ with st.sidebar:
     default_crop = st.session_state.get("crop_input", "Soybean")
     default_stage = st.session_state.get("stage_input", "Flowering")
     default_lang = st.session_state.get("lang_input", "मराठी (Marathi)")
+    default_soil_tex = st.session_state.get("soil_texture_input", "Black Cotton / Clayey (Vertisol)")
+    default_soil_mst = st.session_state.get("soil_moisture_input", "moist")
+    default_irr_meth = st.session_state.get("irr_method_input", "Drip Irrigation (ठिबक सिंचन / ड्रिप)")
+    default_pest = st.session_state.get("target_pest_input", "Spodoptera / Tobacco Caterpillar (Spodoptera litura)")
+    default_chem = st.session_state.get("pesticide_product_input", "Chlorantraniliprole 18.5% SC")
 
     with st.form("farm_form"):
         location = st.text_input("Village / Town / District", value=default_loc, placeholder="e.g. Nashik, Maharashtra")
@@ -222,6 +278,22 @@ with st.sidebar:
         lang_keys = list(LANGUAGES.keys())
         lang_idx = lang_keys.index(default_lang) if default_lang in lang_keys else 0
         language_label = st.selectbox("Advisory language", lang_keys, index=lang_idx)
+
+        st.markdown("**💧 Irrigation Field Conditions**")
+        soil_tex_idx = SUPPORTED_SOIL_TYPES.index(default_soil_tex) if default_soil_tex in SUPPORTED_SOIL_TYPES else 0
+        soil_texture = st.selectbox("Soil Texture", SUPPORTED_SOIL_TYPES, index=soil_tex_idx)
+        soil_mst_idx = ["moist", "dry", "wet"].index(default_soil_mst) if default_soil_mst in ["moist", "dry", "wet"] else 0
+        soil_moisture = st.selectbox("Observed Soil Moisture", ["moist", "dry", "wet"], index=soil_mst_idx, help="Dry: below wilting point | Moist: field capacity (Vafsa) | Wet: waterlogged/saturated")
+        irr_meth_idx = IRRIGATION_METHODS.index(default_irr_meth) if default_irr_meth in IRRIGATION_METHODS else 0
+        irrigation_method = st.selectbox("Irrigation Method", IRRIGATION_METHODS, index=irr_meth_idx)
+
+        st.markdown("**🌿 Pesticide Protection Target**")
+        crop_cfg = get_crop_config(crop)
+        crop_pests = crop_cfg.get("common_pests", ["None / Preventive Scouting"])
+        pest_idx = crop_pests.index(default_pest) if default_pest in crop_pests else 0
+        target_pest = st.selectbox("Target Pest / Disease", crop_pests, index=pest_idx)
+        pesticide_product = st.text_input("Chemical Product Name (Optional)", value=default_chem, placeholder="e.g. Chlorantraniliprole 18.5% SC")
+
         submitted = st.form_submit_button("Analyse my farm →", type="primary", use_container_width=True)
 
     st.divider()
@@ -286,6 +358,11 @@ active_location = selected_preset["location"] if selected_preset else location
 active_crop = selected_preset["crop"] if selected_preset else crop
 active_stage = selected_preset["stage"] if selected_preset else stage
 active_lang_label = selected_preset["lang_label"] if selected_preset else language_label
+active_soil_texture = selected_preset["soil_texture"] if selected_preset else soil_texture
+active_soil_moisture = selected_preset["soil_moisture"] if selected_preset else soil_moisture
+active_irr_method = selected_preset["irrigation_method"] if selected_preset else irrigation_method
+active_pest = selected_preset["target_pest"] if selected_preset else target_pest
+active_product = selected_preset["pesticide_product"] if selected_preset else pesticide_product
 
 if should_run:
     if not active_location.strip():
@@ -303,6 +380,11 @@ if should_run:
                     mandi_commodity=mapped_comm,
                     mandi_api_key=_get_api_key(),
                     lot_quintals=float(lot_quintals),
+                    soil_texture=active_soil_texture,
+                    soil_moisture=active_soil_moisture,
+                    irrigation_method=active_irr_method,
+                    target_pest=active_pest,
+                    pesticide_product=active_product,
                 )
                 st.session_state["report"] = report_data
                 st.session_state["farm_inputs"] = {
@@ -311,6 +393,11 @@ if should_run:
                     "stage": active_stage,
                     "language": active_lang_label,
                     "lang_code": lang_code,
+                    "soil_texture": active_soil_texture,
+                    "soil_moisture": active_soil_moisture,
+                    "irrigation_method": active_irr_method,
+                    "target_pest": active_pest,
+                    "pesticide_product": active_product,
                 }
                 st.session_state["chat_history"] = []
             except AgentStepError as exc:
@@ -330,6 +417,8 @@ if not report:
 
     st.info("💡 **Hackathon Tip:** Click **'🌱 Preset 1: Nashik'** in the sidebar to observe live wet-spell heuristics, the 7-day spray suitability schedule, and grounded Marathi Q&A.")
     st.stop()
+    import sys
+    sys.exit(0)
 
 
 # Extract key report components
@@ -374,10 +463,35 @@ if is_stress_active:
         stage=inputs.get("stage", "Flowering"),
         language=chat_lang,
     )
+    stressed_irr = plan_7day_irrigation_schedule(
+        daily_dates=daily_s.get("time", []),
+        daily_rain=daily_s.get("precipitation_sum", []),
+        daily_et0=daily_s.get("et0_fao_evapotranspiration", []),
+        crop=inputs.get("crop", "Soybean"),
+        stage=inputs.get("stage", "Flowering"),
+        soil_texture=inputs.get("soil_texture", "Black Cotton / Clayey (Vertisol)"),
+        soil_moisture=inputs.get("soil_moisture", "moist"),
+        irrigation_method=inputs.get("irrigation_method"),
+        language=chat_lang,
+    )
+    stressed_pest = assess_pesticide_weather_suitability(
+        dates=daily_s.get("time", []),
+        rain_mm=daily_s.get("precipitation_sum", []),
+        rain_prob=daily_s.get("precipitation_probability_max", []),
+        wind_kmh=daily_s.get("wind_speed_10m_max", []),
+        temp_max=daily_s.get("temperature_2m_max", []),
+        crop=inputs.get("crop", "Soybean"),
+        stage=inputs.get("stage", "Flowering"),
+        target_pest=inputs.get("target_pest"),
+        product_name=inputs.get("pesticide_product"),
+        language=chat_lang,
+    )
     active_report = {
         **report,
         "weather": stressed_weather,
         "risk": stressed_risk,
+        "irrigation": stressed_irr,
+        "pesticide_spray": stressed_pest,
         "economics_and_water": {
             "lot_quintals": float(lot_quintals),
             "mandi_arbitrage": stressed_econ,
@@ -412,18 +526,14 @@ elif float(lot_quintals) != float(report.get("economics_and_water", {}).get("lot
 place = active_report["location"]
 risk = active_report["risk"]
 mandi = active_report["mandi"]
+irr_data = active_report.get("irrigation", {})
+pest_data = active_report.get("pesticide_spray", {})
 econ_water = active_report.get("economics_and_water", {})
 mandi_econ = econ_water.get("mandi_arbitrage", {})
 water_bal = econ_water.get("water_balance", {})
 
-safe_days = risk.get("spray_schedule", [])
-safe_count = sum(1 for d in safe_days if d.get("status") == "SAFE")
-caution_count = sum(1 for d in safe_days if d.get("status") == "CAUTION")
-avoid_count = sum(1 for d in safe_days if d.get("status") == "AVOID")
-
-
 # --- 1. TOP EXECUTIVE KPI STRIP ---
-st.markdown("### 📊 Farm Risk & Market Signals")
+st.markdown("### 📊 Farm Risk & Agronomic Signals")
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
@@ -445,66 +555,198 @@ with k2:
       <div class="kpi-value">{score}<span style="font-size: 1rem; color: #64748b;"> / 100</span>
         <span style="font-size: 0.8rem; background:{badge_bg}; color:{badge_color}; padding: 2px 7px; border-radius: 6px; margin-left: 6px;">{risk['localized_label']}</span>
       </div>
-      <div class="kpi-subtext">Deterministic heuristic index (not ML)</div>
+      <div class="kpi-subtext">Deterministic crop-stage heuristic index</div>
     </div>
     """, unsafe_allow_html=True)
 
 with k3:
-    best_date = risk.get("best_spray_window") or "None"
+    irr_status = irr_data.get("overall_status", "MONITOR SOIL MOISTURE")
+    irr_bg = "#fee2e2" if irr_status == "DEFER AND RECHECK" else ("#dbeafe" if irr_status == "IRRIGATION MAY BE NEEDED" else "#f1f5f9")
+    irr_col = "#991b1b" if irr_status == "DEFER AND RECHECK" else ("#1e40af" if irr_status == "IRRIGATION MAY BE NEEDED" else "#475569")
+    def_val = irr_data.get("net_moisture_deficit_mm")
+    etc_val = irr_data.get("total_etc_mm")
+    def_txt = f"Deficit: {def_val:.1f} mm · ETc: {etc_val:.1f} mm" if def_val is not None else "Incalculable (missing ET0)"
     st.markdown(f"""
     <div class="kpi-card">
-      <div class="kpi-label">Optimal Spray Window</div>
-      <div class="kpi-value">{best_date}</div>
-      <div class="kpi-subtext">{safe_count} Safe · {caution_count} Caution · {avoid_count} Avoid</div>
+      <div class="kpi-label">💧 7-Day Irrigation Need</div>
+      <div class="kpi-value" style="font-size: 1.15rem; color:{irr_col}; font-weight: 800;">
+        {irr_status}
+      </div>
+      <div class="kpi-subtext">{def_txt} · {inputs.get('soil_moisture', 'moist').upper()} soil</div>
     </div>
     """, unsafe_allow_html=True)
 
 with k4:
-    if mandi.get("status") == "cached_snapshot" or mandi.get("is_snapshot"):
-        top_rec = mandi["records"][0] if mandi.get("records") else {}
-        modal_val = f"₹{top_rec.get('Modal price (₹/quintal)', 'N/A')}/Q"
-        mkt_name = f"📦 Snapshot: {top_rec.get('Market', 'APMC')} ({top_rec.get('Date', '')})"
-    elif mandi.get("connected") and mandi.get("records"):
-        top_rec = mandi["records"][0]
-        modal_val = f"₹{top_rec.get('Modal price (₹/quintal)', 'N/A')}/Q"
-        mkt_name = f"{top_rec.get('Market', 'Mandi')} ({mandi.get('query_level', 'state')})"
-    else:
-        modal_val = mandi.get("status", "Degraded").title()
-        mkt_name = f"Latency: {report.get('total_latency_ms', 0)} ms (No mock prices)"
-
+    pest_status = pest_data.get("overall_status", "SUITABLE WEATHER WINDOW")
+    pest_col = "#15803d" if "SUITABLE" in pest_status else ("#b91c1c" if "AVOID" in pest_status else "#b45309")
+    s_cnt = len(pest_data.get("suitable_dates", []))
+    c_cnt = len(pest_data.get("caution_dates", []))
+    a_cnt = len(pest_data.get("avoid_dates", []))
+    best_w = pest_data.get("best_window") or "None"
     st.markdown(f"""
     <div class="kpi-card">
-      <div class="kpi-label">Mandi Market Signal</div>
-      <div class="kpi-value">{modal_val}</div>
-      <div class="kpi-subtext">{mkt_name}</div>
+      <div class="kpi-label">🌿 Spray Weather Window</div>
+      <div class="kpi-value" style="font-size: 1.15rem; color:{pest_col}; font-weight: 800;">
+        {best_w}
+      </div>
+      <div class="kpi-subtext">{s_cnt} Suitable · {c_cnt} Caution · {a_cnt} Avoid</div>
     </div>
     """, unsafe_allow_html=True)
 
 st.write("")
 
 
-# --- 2. 7-DAY FIELD & SPRAY SUITABILITY SCHEDULE ---
-st.markdown("### 🗓️ 7-Day Field & Spraying Suitability Schedule")
-st.caption("Daily agronomic suitability: **AVOID** (Rain ≥ 5mm, Prob ≥ 70%, Wind ≥ 20 km/h) | **CAUTION** (Rain ≥ 1.5mm, Prob ≥ 45%, Wind ≥ 15 km/h) | **SAFE** (Calm & dry)")
+# --- 2. 7-DAY DUAL OPERATIONAL CALENDAR (INDEPENDENT ADVISORY ENGINES) ---
+st.markdown("### 🗓️ 7-Day Dual Operational Calendar")
+st.caption("💧 **Row 1: Root-Zone Irrigation Need** (Root depth deficit via FAO-56 Penman-Monteith) | 🌿 **Row 2: Foliar Pesticide Weather** (Canopy atmospheric drift & wash-off limits)")
 
-schedule_days = risk.get("spray_schedule", [])
-if schedule_days:
-    cols = st.columns(len(schedule_days))
-    for idx, day in enumerate(schedule_days):
+irr_schedule = irr_data.get("daily_schedule", [])
+pest_schedule = pest_data.get("daily_schedule", [])
+cal_len = max(len(irr_schedule), len(pest_schedule))
+
+if cal_len > 0:
+    cols = st.columns(cal_len)
+    for idx in range(cal_len):
+        i_day = irr_schedule[idx] if idx < len(irr_schedule) else {}
+        p_day = pest_schedule[idx] if idx < len(pest_schedule) else {}
+        d_date = i_day.get("date") or p_day.get("date") or f"Day {idx+1}"
+
+        # Irrigation status styling
+        i_status = i_day.get("status", "MONITOR SOIL MOISTURE")
+        if i_status == "IRRIGATION MAY BE NEEDED":
+            i_badge_cls = "badge-irr-need"
+            i_icon = "💧"
+        elif i_status == "DEFER AND RECHECK":
+            i_badge_cls = "badge-irr-defer"
+            i_icon = "⏳"
+        elif i_status == "INSUFFICIENT DATA":
+            i_badge_cls = "badge-irr-unknown"
+            i_icon = "❓"
+        else:
+            i_badge_cls = "badge-irr-monitor"
+            i_icon = "👁️"
+
+        # Pesticide status styling
+        p_status = p_day.get("status", "SUITABLE WEATHER WINDOW")
+        if p_status == "SUITABLE WEATHER WINDOW":
+            p_badge_cls = "badge-pest-suitable"
+            p_icon = "✅"
+        elif p_status == "CAUTION WINDOW":
+            p_badge_cls = "badge-pest-caution"
+            p_icon = "⚠️"
+        elif p_status == "AVOID SPRAYING":
+            p_badge_cls = "badge-pest-avoid"
+            p_icon = "❌"
+        else:
+            p_badge_cls = "badge-pest-unknown"
+            p_icon = "❓"
+
+        i_etc_val = f"{i_day.get('etc_mm'):.1f}" if i_day.get("etc_mm") is not None else "N/A"
+        i_eff_val = f"{i_day.get('effective_rain_mm'):.1f}" if i_day.get("effective_rain_mm") is not None else "N/A"
+        p_rain_val = f"{p_day.get('rain_mm'):.1f}" if p_day.get("rain_mm") is not None else "0.0"
+        p_prob_val = f"{p_day.get('rain_prob'):.0f}" if p_day.get("rain_prob") is not None else "0"
+        p_wind_val = f"{p_day.get('wind_kmh'):.1f}" if p_day.get("wind_kmh") is not None else "N/A"
+
         with cols[idx]:
-            status = day.get("status", "SAFE")
-            badge_class = f"badge-{status.lower()}"
-            badge_icon = {"SAFE": "✅", "CAUTION": "⚠️", "AVOID": "❌"}.get(status, "•")
             st.markdown(f"""
-            <div class="day-card">
-              <div class="day-date">{day['date']}</div>
-              <div class="{badge_class}">{badge_icon} {day.get('localized_status', status)}</div>
-              <div class="day-metric" style="margin-top: 0.6rem;">💧 <b>{day.get('rain_mm', 0):.1f}</b> mm</div>
-              <div class="day-metric">🌧️ <b>{day.get('rain_prob', 0):.0f}%</b> chance</div>
-              <div class="day-metric">💨 <b>{day.get('wind_kmh', 0):.1f}</b> km/h</div>
-              <div class="day-reason">{day.get('reason', '')}</div>
+            <div class="day-card" style="min-height: 295px; text-align: left; padding: 0.6rem 0.5rem;">
+              <div class="day-date" style="text-align: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px;">{d_date}</div>
+              
+              <!-- SECTION A: SOIL IRRIGATION -->
+              <div style="margin-top: 5px; padding: 5px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                <div style="font-size: 0.70rem; font-weight: 700; color: #1e40af;">💧 SOIL WATER</div>
+                <div style="margin: 3px 0;"><span class="{i_badge_cls}">{i_icon} {i_day.get('localized_status', i_status)}</span></div>
+                <div style="font-size: 0.74rem; color: #334155;">ET<sub>c</sub>: <b>{i_etc_val}</b> mm</div>
+                <div style="font-size: 0.74rem; color: #334155;">Eff Rain: <b>{i_eff_val}</b> mm</div>
+                <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px; line-height: 1.15;">{i_day.get('reason', '')[:65]}...</div>
+              </div>
+
+              <!-- SECTION B: PESTICIDE SPRAY -->
+              <div style="margin-top: 6px; padding: 5px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
+                <div style="font-size: 0.70rem; font-weight: 700; color: #065f46;">🌿 PESTICIDE WEATHER</div>
+                <div style="margin: 3px 0;"><span class="{p_badge_cls}">{p_icon} {p_day.get('localized_status', p_status)}</span></div>
+                <div style="font-size: 0.74rem; color: #334155;">Wind: <b>{p_wind_val}</b> km/h</div>
+                <div style="font-size: 0.74rem; color: #334155;">Rain: <b>{p_prob_val}%</b> ({p_rain_val}mm)</div>
+                <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px; line-height: 1.15;">{p_day.get('reason', '')[:65]}...</div>
+              </div>
             </div>
             """, unsafe_allow_html=True)
+
+st.write("")
+
+
+# --- 2.1. DEDICATED ENGINE BREAKDOWNS (MODULE 1: IRRIGATION & MODULE 2: PESTICIDE) ---
+irr_plan_col, pest_plan_col = st.columns([1, 1])
+
+with irr_plan_col:
+    st.markdown("### 💧 Section A: Irrigation Advisory Engine")
+    st.caption("Plan root irrigation via FAO-56 Penman-Monteith ETc and soil capacity. Never mixes chemical spray dilution with soil watering.")
+    
+    irr_verdict = irr_data.get("overall_verdict", "")
+    if "DEFER" in irr_data.get("overall_status", ""):
+        st.warning(f"**{irr_verdict}**")
+    elif "IRRIGATION MAY BE NEEDED" in irr_data.get("overall_status", ""):
+        st.info(f"**{irr_verdict}**")
+    else:
+        st.success(f"**{irr_verdict}**")
+
+    iw1, iw2, iw3, iw4 = st.columns(4)
+    with iw1:
+        kc_v = irr_data.get("kc")
+        st.metric("Crop Stage Kc", f"{kc_v:.2f}" if kc_v is not None else "N/A", help="FAO-56 Table 12 crop coefficient")
+    with iw2:
+        etc_v = irr_data.get("total_etc_mm")
+        st.metric("7-Day ETc Demand", f"{etc_v:.1f} mm" if etc_v is not None else "N/A", help="Crop water requirement = ET0 × Kc")
+    with iw3:
+        eff_v = irr_data.get("total_effective_rain_mm")
+        st.metric("Effective Rain (Peff)", f"{eff_v:.1f} mm" if eff_v is not None else "N/A", help="Discounted for runoff and interception")
+    with iw4:
+        net_def = irr_data.get("net_moisture_deficit_mm")
+        st.metric("Net Soil Deficit", f"{net_def:.1f} mm" if net_def is not None else "N/A", help="Net root moisture deficit")
+
+    st.markdown(f"**Field Profile:** Soil: `{irr_data.get('soil_texture', 'Loamy')}` | Moisture: `{irr_data.get('initial_soil_moisture', 'moist').upper()}` | Method: `{inputs.get('irrigation_method', 'Drip')}`")
+    st.caption(irr_data.get("disclaimer", "Verify field moisture before operating valves."))
+
+with pest_plan_col:
+    st.markdown("### 🌿 Section B: Pesticide Spray Weather & CIBRC Claims")
+    st.caption("Evaluate foliar drift, wash-off risk & statutory CIBRC label claims. Prohibits guessed dosages or unconditional spray guarantees.")
+
+    p_verdict = pest_data.get("overall_verdict", "")
+    if "SUITABLE" in pest_data.get("overall_status", ""):
+        st.success(f"**{p_verdict}**")
+    elif "AVOID" in pest_data.get("overall_status", ""):
+        st.error(f"**{p_verdict}**")
+    else:
+        st.warning(f"**{p_verdict}**")
+
+    # Stage Warning (e.g. Pollinator Warning during Flowering)
+    stage_w = pest_data.get("stage_warning")
+    if stage_w:
+        st.warning(f"⚠️ **Crop Stage Alert:** {stage_w}")
+
+    # Statutory CIBRC Label Claim Card
+    lbl = pest_data.get("label_evaluation", {})
+    if lbl.get("status") == "OFFICIAL_LABEL_VERIFIED":
+        st.markdown(f"""
+        <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 10px 14px; margin-top: 6px;">
+          <div style="font-weight: 750; color: #166534; font-size: 0.92rem;">✅ Statutory CIBRC Label Claim Verified</div>
+          <div style="font-size: 0.80rem; color: #14532d; margin-top: 2px;"><b>Active Ingredient:</b> {lbl.get('active_ingredient')}</div>
+          <div style="font-size: 0.80rem; color: #14532d;"><b>Verified Dosage:</b> <span style="background:#bbf7d0; padding:1px 5px; border-radius:4px; font-weight:700;">{lbl.get('recommended_dose')}</span></div>
+          <div style="font-size: 0.80rem; color: #14532d;"><b>Water Volume:</b> {lbl.get('water_volume_liters_acre')} L/Acre · <b>Pre-Harvest Interval (PHI):</b> {lbl.get('phi_days')} Days</div>
+          <div style="font-size: 0.75rem; color: #15803d; margin-top: 2px;">🐝 <em>Pollinator Safety:</em> {lbl.get('pollinator_safety')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif lbl.get("status") == "NO_PEST_SPECIFIED":
+        st.info(f"📋 **Target Problem:** {lbl.get('advisory_message')}")
+    else:
+        st.markdown(f"""
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin-top: 6px;">
+          <div style="font-weight: 750; color: #92400e; font-size: 0.92rem;">⚠️ Statutory Label Verification Notice</div>
+          <div style="font-size: 0.80rem; color: #78350f; margin-top: 2px;">{lbl.get('advisory_message')}</div>
+          <div style="font-size: 0.74rem; color: #b45309; margin-top: 2px;"><em>Notice: Under the Insecticides Act, chemical dosages cannot be certified from crop name alone. Follow registered product container leaflet and consult KVK.</em></div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.caption(pest_data.get("disclaimer", "Weather suitability does not replace container label directives."))
 
 st.write("")
 

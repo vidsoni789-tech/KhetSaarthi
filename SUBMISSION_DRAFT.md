@@ -18,17 +18,17 @@ Smallholder farmers, Farmer Producer Organizations (FPOs), and agricultural exte
 ## 2. Solution Description
 
 **High-Level Overview:**
-KhetSaarthi is an AI-powered, live-source-first agricultural risk advisory agent. In under 2.5 seconds, the agent resolves farm coordinates, retrieves live 7-day weather forecasts (Open-Meteo), checks daily government mandi market records (data.gov.in AGMARKNET), evaluates transparent crop-stage heuristics, generates an operational 7-day spray suitability schedule (`SAFE` / `CAUTION` / `AVOID`), and provides grounded multilingual Q&A in Marathi (`mr`), Hindi (`hi`), and English (`en`).
+KhetSaarthi is an AI-powered, live-source-first agricultural decision-support agent. In under 2.5 seconds, the agent resolves farm coordinates, retrieves live 7-day weather forecasts (Open-Meteo), checks daily government mandi market records (data.gov.in AGMARKNET), evaluates transparent crop-stage heuristics, generates two independently functioning advisory engines — **Dedicated Agricultural Water Management & Irrigation Planner** (FAO-56 Penman-Monteith) and **Foliar Pesticide Spray Weather Suitability & Statutory CIBRC Claims** — displayed in a **7-Day Dual Operational Calendar**, and provides grounded multilingual conversational Q&A in Marathi (`mr`), Hindi (`hi`), and English (`en`).
 
 **Technical Architecture & Highlights:**
-- **Frontend & Visualizations:** Streamlit (`app.py`), executive KPI metrics, responsive 7-day spray suitability card strip, interactive Plotly charts with agronomic decision thresholds (5mm spray avoid line, 36°C heat watch, 20 km/h spray drift line).
-- **Location Geocoding (`core/sources.py`):** Open-Meteo Geocoding API with smart compound fallback: parses multi-token queries like `"Lasalgaon, Nashik"` or `"Baramati, MH"` to rank candidates by state/district hints and population.
-- **Meteorological Adapter (`core/sources.py`):** Open-Meteo 7-Day Forecast API (daily max/min temp, precipitation sum, precipitation probability %, wind speed 10m max, and reference evapotranspiration ET₀).
-- **Wholesale Mandi Adapter (`core/sources.py`):** Government of India AGMARKNET daily dataset with a **strict 4.5-second timeout**, 1 retry, and automatic district-to-state fallback.
-- **Autonomous Agent Orchestrator (`core/agent.py`):** Explicit 6-step execution plan, high-resolution millisecond latency tracking (`latency_ms`), assertion-based validation gate, and graceful `PARTIAL_FALLBACK` handling if government APIs time out or return `"Resource lists"`.
-- **Explainable Risk Engine (`core/risk_engine.py`):** Deterministic 0–100 heuristic risk scoring; evaluates heavy rain (≥50mm), heat stress (≥36°C / 40°C), wind drift (≥35 km/h), short dry spells, and specialized stage-sensitive triggers (`flowering_wet_stress`, `harvest_wet_risk`, `wet_spell`).
-- **Grounded Multilingual Chat Router (`core/chat.py`):** Zero-hallucination intent router answering questions on spraying schedules, rainfall dates, temperature & irrigation (ET₀), risk score attribution, and mandi rates. Features 4 1-click suggested prompts per language.
-- **Test Infrastructure:** 23 automated, offline-safe unit tests in `tests/` with 100% pass rate in <1.3 seconds.
+- **Dedicated Irrigation Planner (`core/irrigation.py`):** Root-zone water balance computing $ET_c = ET_0 \times K_c$, effective rainfall $P_{\text{eff}}$, soil texture capacity (Black Cotton Vertisol, Loamy, Sandy), and farmer soil moisture state (`dry`, `moist`, `wet`). Strictly avoids universal 2-day rules and prohibits fake pump hours or liters without emitter discharge specs. Statuses: `IRRIGATION MAY BE NEEDED`, `DEFER AND RECHECK`, `MONITOR SOIL MOISTURE`, `INSUFFICIENT DATA`.
+- **Pesticide Spray Weather Suitability (`core/pesticide_spray.py`):** Foliar canopy evaluation for wind drift ($<15$ km/h), rain wash-off, and thermal inversion. Strictly complies with statutory CIBRC label claims and prohibits guessed chemical dosages or generic "SAFE TO SPRAY" guarantees. Statuses: `SUITABLE WEATHER WINDOW`, `CAUTION WINDOW`, `AVOID SPRAYING`, `UNKNOWN DUE TO MISSING INFORMATION`.
+- **Crop Agronomy Registry (`core/crop_config.py`):** 10 crops with verified FAO-56 Table 12 $K_c$ parameters across 4 growth stages, FAO-33 $K_y$ yield sensitivity, stage warnings (pollinator hazard during bloom, statutory PHI near harvest), and CIBRC approved label database.
+- **Frontend & Visualizations:** Streamlit (`app.py`), executive KPI metrics, 7-Day Dual Operational Calendar showing independent soil water and foliar spray rows, interactive Plotly forecast charts with decision thresholds.
+- **Location Geocoding (`core/sources.py`):** Open-Meteo Geocoding API with smart compound fallback ranking candidates by state/district hints and population.
+- **Wholesale Mandi Adapter (`core/sources.py`):** Government of India AGMARKNET daily dataset with a **strict 4.5-second timeout**, 1 retry, automatic district-to-state fallback, and verified historical snapshot fallback.
+- **Grounded Multilingual Conversational Engine (`core/chat.py`):** Token-aware intent router distinguishing greetings, irrigation questions, foliar spray weather, rain dates, heat, and mandi prices, with grounded LLM integration (Groq LLaMA 3.3, Google Gemini, Hugging Face) and deterministic offline fallback.
+- **Test Infrastructure:** 51 automated, offline-safe unit tests in `tests/` with 100% pass rate in <5 seconds.
 
 **Strict Data-Integrity Guardrails:**
 - Never hardcodes or fabricates mock weather or synthetic mandi prices.
@@ -48,13 +48,13 @@ KhetSaarthi is an AI-powered, live-source-first agricultural risk advisory agent
 ## 4. Demo Video
 
 **2–3 Minute Live Walkthrough:** [INSERT LOOM / YOUTUBE / DRIVE LINK]  
-*(Choreographed precisely to 2:30 following `DEMO_SCRIPT.md`: Problem -> 1-Click Preset 1 Nashik -> 7-Day Spray Strip -> Grounded Marathi Q&A -> Telemetry & Partial Fallback Trace)*
+*(Choreographed precisely to 2:30 following `DEMO_SCRIPT.md`: Problem -> 1-Click Preset 1 Nashik -> 7-Day Dual Operational Calendar -> Dedicated Irrigation & Pesticide Sections -> Grounded Marathi Q&A -> Telemetry & Partial Fallback Trace)*
 
 ---
 
 ## 5. GitHub Repository
 
-**Public Repository URL:** [INSERT PUBLIC GITHUB URL]  
+**Public Repository URL:** https://github.com/vidsoni789-tech/KhetSaarthi.git  
 - Fully documented `README.md` with Mermaid architecture diagram.
 - Clean `requirements.txt` and `.env.example`.
 - Verified `.gitignore` ensuring zero secret leaks.
