@@ -32,9 +32,16 @@ KhetSaarthi bridges the gap between fragmented meteorological data and volatile 
    - Zero-hallucination Q&A router grounded strictly in the current advisory session's fetched metrics.
    - Accurately answers inquiries regarding spray timing windows, rainfall dates, temperature & irrigation (ET₀), risk score attribution, and mandi rates.
    - Provides 4 natural 1-click suggested question prompts per language for instant judge exploration.
-6. **Executive Streamlit Decision Dashboard (`app.py`):**
+6. **Decision Science & Agricultural Economics (`core/economics.py`):**
+   - **Spatial Mandi Arbitrage:** Haversine × 1.25 road distance calculation with freight deduction (`₹1.50/Q/km`), ranking markets by **Net Take-Home Revenue (₹)**.
+   - **Weather Spoilage Value-at-Risk (VaR in ₹):** Quantifies financial loss for configurable lot sizes (5–100 Q) if harvest produce faces unseasonal rain or extreme weather.
+   - **FAO-56 Precision Irrigation:** Implements $\text{ET}_c = K_c \times \text{ET}_0$ against effective rainfall ($P_{\text{eff}} = 0.80 \times \text{Rain}$), calculating net moisture deficit (mm), liters/acre, and drip pump run-time (hours/acre).
+   - **Counterfactual Weather Stress-Test Simulator:** Allows judges to simulate +Rain, +Heat, or +Wind deltas live on stage with an isolated deep-copy modifier.
+   - **Zero-Dependency Multilingual Voice Advisory:** Browser-native speech synthesis speaking localized advisories aloud in Marathi (`mr-IN`), Hindi (`hi-IN`), and English (`en-IN`).
+   - **1-Click WhatsApp / 2G SMS Village Bulletin:** Instant copy-ready bulletin with direct `wa.me` share button for FPO leaders and Krishi Sevaks.
+7. **Executive Streamlit Decision Dashboard (`app.py`):**
    - **1-Click Judge Demo Presets** for instant live evaluation (`Nashik`, `Latur`, `Lasalgaon`).
-   - Executive 4-metric KPI summary strip.
+   - Executive 4-metric KPI summary strip + Economic & Water Balance Cards.
    - Responsive 7-day visual spray suitability card strip.
    - Plotly forecast charts with decision threshold reference lines (5mm rain avoid line, 36°C heat watch, 20 km/h spray drift limit).
    - Autonomous execution trace showing step-by-step latency in milliseconds and verification evidence.
@@ -155,7 +162,7 @@ streamlit run app.py
 
 ## 🧪 Automated Testing & Verification
 
-The project includes 24 automated, offline-safe unit tests in `tests/`:
+The project includes 31 automated, offline-safe unit tests in `tests/`:
 
 ```powershell
 python -m pytest -v
@@ -163,18 +170,19 @@ python -m pytest -v
 
 ```text
 ============================= test session starts =============================
-collected 24 items
+collected 31 items
 
-tests\test_phase3_risk_and_chat.py .........                             [ 37%]
-tests\test_risk_engine.py .....                                          [ 58%]
+tests\test_phase3_risk_and_chat.py .........                             [ 29%]
+tests\test_phase45_innovations.py .......                                [ 51%]
+tests\test_risk_engine.py .....                                          [ 67%]
 tests\test_sources_and_agent.py ..........                               [100%]
 
-============================= 24 passed in 0.35s ==============================
+============================= 31 passed in 0.58s ==============================
 ```
 
 To run the live external API smoke test (requires network access):
 ```powershell
-python scripts/smoke_test_phase3.py
+python scripts/smoke_test_phase45.py
 ```
 
 ---

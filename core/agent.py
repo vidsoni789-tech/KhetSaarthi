@@ -11,6 +11,10 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+from .economics import (
+    compute_crop_water_balance,
+    evaluate_mandi_arbitrage_and_hold_risk,
+)
 from .risk_engine import assess_weather_risk
 from .sources import (
     geocode_location,
@@ -69,17 +73,19 @@ def run_advisory(
     mandi_state: str = "",
     mandi_commodity: str = "",
     mandi_api_key: str | None = None,
+    lot_quintals: float = 20.0,
 ) -> dict[str, Any]:
     """Plan, execute, validate, and compose an advisory from live external sources.
 
     Execution graph:
-    1. Plan: Establishes a 5-step execution strategy.
+    1. Plan: Establishes a 6-step autonomous execution strategy.
     2. Geocode (Essential): Resolves place to lat/lon with smart fallback.
     3. Weather (Essential): Fetches 7-day daily forecast via Open-Meteo.
     4. Mandi (Optional Tool): Queries AGMARKNET daily wholesale prices (4.5s max).
        Degrades gracefully to partial_fallback without breaking weather advisory.
     5. Risk Engine: Evaluates deterministic rule-based triggers for crop & stage.
-    6. Validation: Enforces bounding and source-freshness integrity assertions.
+    6. Economics & Water: Calculates spatial mandi arbitrage, spoilage VaR & FAO-56 irrigation.
+    7. Validation: Enforces bounding and source-freshness integrity assertions.
     """
     total_t0 = time.perf_counter()
     log: list[dict[str, Any]] = []
@@ -90,14 +96,15 @@ def run_advisory(
         "Fetch the seven-day forecast for the resolved coordinates",
         "Attempt a current daily mandi-price lookup (when configured)",
         "Evaluate forecast risks against transparent crop-stage rules",
+        "Calculate spatial mandi arbitrage, spoilage VaR, and FAO-56 crop water balance",
         "Validate source availability and assemble localized actions",
     ]
     log.append({
         "step": "plan",
         "status": "completed",
         "latency_ms": 1,
-        "detail": "Created 5-step autonomous execution plan",
-        "evidence": "5 stages scheduled: Geocoding -> 7-Day Forecast -> AGMARKNET Mandi -> Risk Engine -> Output Validation",
+        "detail": "Created 6-step autonomous execution plan",
+        "evidence": "6 stages scheduled: Geocoding -> 7-Day Forecast -> AGMARKNET Mandi -> Risk Engine -> Economics & Water -> Output Validation",
     })
 
     # 2. GEOCODE (Essential)
@@ -223,7 +230,67 @@ def run_advisory(
     except Exception as exc:
         raise AgentStepError(f"Risk engine evaluation failed: {exc}") from exc
 
-    # 6. VALIDATION (Assertion Gate)
+    # 6. ECONOMICS & WATER BALANCE (Spatial Arbitrage, Spoilage VaR & FAO-56 Irrigation)
+    try:
+        def _calc_econ() -> dict[str, Any]:
+            daily = weather.get("daily", {})
+            dates = daily.get("time", [])
+            et0_series = daily.get("et0_fao_evapotranspiration", [])
+            rain_series = daily.get("precipitation_sum", [])
+            rain_prob_series = daily.get("precipitation_probability_max", [])
+
+            cum_rain = sum(r for r in rain_series if r is not None)
+            max_prob = max([p for p in rain_prob_series if p is not None], default=0.0)
+
+            origin_dist = place.get("admin2", "")
+            origin_pt = (place["latitude"], place["longitude"])
+
+            mandi_econ = evaluate_mandi_arbitrage_and_hold_risk(
+                mandi_data=mandi,
+                origin_district=origin_dist,
+                origin_coords=origin_pt,
+                crop=crop,
+                stage=stage,
+                weather_risk_score=risk.get("score", 0),
+                forecast_rain_mm=cum_rain,
+                forecast_max_rain_prob=max_prob,
+                lot_quintals=lot_quintals,
+                language=language,
+            )
+
+            water_bal = compute_crop_water_balance(
+                daily_dates=dates,
+                daily_et0=et0_series,
+                daily_rain=rain_series,
+                crop=crop,
+                stage=stage,
+                language=language,
+            )
+
+            return {
+                "lot_quintals": lot_quintals,
+                "mandi_arbitrage": mandi_econ,
+                "water_balance": water_bal,
+            }
+
+        economics_and_water, econ_ms = _timed_step(
+            log,
+            "economics_and_water",
+            "Calculate spatial mandi arbitrage, weather spoilage VaR, and FAO-56 crop water balance",
+            _calc_econ,
+        )
+        best_mkt = economics_and_water["mandi_arbitrage"].get("best_market_name", "Local APMC")
+        net_rev = economics_and_water["mandi_arbitrage"].get("best_market_net_revenue", 0.0)
+        spoil_var = economics_and_water["mandi_arbitrage"].get("spoilage_var_inr", 0.0)
+        drip_hrs = economics_and_water["water_balance"].get("drip_hours_per_acre", 0.0)
+        deficit_mm = economics_and_water["water_balance"].get("net_irrigation_deficit_mm", 0.0)
+
+        log[-1]["detail"] = f"Economics: Best APMC '{best_mkt}' (Net ₹{net_rev:,.0f} for {lot_quintals}Q), Spoilage VaR ₹{spoil_var:,.0f} | Water: Deficit {deficit_mm:.1f} mm (~{drip_hrs:.1f} hrs drip)"
+        log[-1]["evidence"] = f"Top Take-Home: ₹{net_rev:,.0f} | Spoilage VaR: ₹{spoil_var:,.0f} | Deficit: {deficit_mm:.1f} mm ({drip_hrs:.1f} hrs/acre drip)"
+    except Exception as exc:
+        raise AgentStepError(f"Economics and water optimization failed: {exc}") from exc
+
+    # 7. VALIDATION (Assertion Gate)
     try:
         _, val_ms = _timed_step(
             log,
@@ -250,6 +317,7 @@ def run_advisory(
         "weather": weather,
         "mandi": mandi,
         "risk": risk,
+        "economics_and_water": economics_and_water,
         "agent_log": log,
         "plan": plan,
         "generated_at": generated_local,
@@ -270,3 +338,7 @@ def _validate_report(place: dict[str, Any], weather: dict[str, Any], risk: dict[
     assert 0 <= risk["score"] <= 100, "Risk score outside 0-100 range"
     assert risk["forecast_rows"], "Forecast rows missing"
     return True
+
+
+# Alias for hackathon and backward-compatible agent invocation
+run_khetsaarthi_agent = run_advisory
