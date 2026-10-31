@@ -118,4 +118,3 @@
 
 ### 6. "How do you prove that your application is reliable and crash-proof?"
 > *"We maintain a suite of **23 automated unit tests** in `tests/` covering API key isolation, mock timeout handling, geocoding fallback, stage risk triggers, spray schedules, and multilingual Q&A. The entire test suite executes in **under 1 second** with a 100% pass rate, and our Streamlit application boots cleanly with HTTP 200 OK."*
-

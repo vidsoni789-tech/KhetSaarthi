@@ -234,3 +234,4 @@ def test_send_real_whatsapp_message_twilio_mock():
         # Verify endpoint called
         called_url = mock_post.call_args[0][0]
         assert "api.twilio.com/2010-04-01/Accounts/ACmocked_sid_123456/Messages.json" in called_url
+
