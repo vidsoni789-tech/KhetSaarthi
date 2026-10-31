@@ -758,15 +758,15 @@ with voice_col:
 
 with wa_col:
     st.markdown("#### 📲 Outbound WhatsApp Push & Village Bulletin")
-    st.caption("Deliver real advisories directly to farmer phones via Twilio, CallMeBot webhook, or 1-click WhatsApp deep-link.")
+    st.caption("Deliver real advisories directly to farmer phones via WhatsApp 1-click deep-link, CallMeBot webhook, or Twilio API.")
 
     advisory_msg = format_whatsapp_advisory_message(report, language=chat_lang)
 
     farmer_phone = st.text_input(
         "Farmer WhatsApp Phone Number",
-        value=st.session_state.get("farmer_phone_input", "+919876543210"),
+        value=st.session_state.get("farmer_phone_input", "+919131374796"),
         key="farmer_phone_input",
-        help="Format: +919876543210 or 9876543210. Real push will be sent to this recipient.",
+        help="Format: +919131374796 or 9131374796. Advisory will be delivered to this recipient.",
     )
 
     clean_num = clean_phone_number(farmer_phone)
@@ -777,17 +777,76 @@ with wa_col:
     tw_from = st.session_state.get("sb_tw_from", "").strip() or os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886").strip()
     cmb_key = st.session_state.get("sb_cmb_key", "").strip() or os.getenv("CALLMEBOT_API_KEY", "").strip()
 
-    push_c1, push_c2 = st.columns([1, 1])
-    with push_c1:
-        send_push_btn = st.button("🚀 Send Real WhatsApp Push", type="primary", use_container_width=True)
-    with push_c2:
+    has_api_backend = bool((tw_sid and tw_token) or cmb_key)
+
+    if has_api_backend:
+        push_c1, push_c2 = st.columns([1, 1])
+        with push_c1:
+            send_push_btn = st.button("🚀 Send Real WhatsApp Push (API)", type="primary", use_container_width=True)
+        with push_c2:
+            st.markdown(
+                f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+                f'<button style="background:#25D366;color:white;border:none;padding:10px 14px;border-radius:8px;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;box-shadow:0 2px 6px rgba(37,211,102,0.25);">'
+                f'💬 Open in WhatsApp (1-Click)'
+                f'</button></a>',
+                unsafe_allow_html=True,
+            )
+        if send_push_btn:
+            with st.spinner("Dispatching outbound WhatsApp message via configured HTTP gateway..."):
+                disp_result = send_real_whatsapp_message(
+                    phone_number=clean_num,
+                    message=advisory_msg,
+                    twilio_sid=tw_sid or None,
+                    twilio_token=tw_token or None,
+                    twilio_from=tw_from,
+                    callmebot_api_key=cmb_key or None,
+                )
+                st.session_state["last_wa_dispatch"] = disp_result
+    else:
+        # Direct 1-Click WhatsApp Delivery (Zero API Keys Needed)
         st.markdown(
             f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
-            f'<button style="background:#25D366;color:white;border:none;padding:10px 14px;border-radius:8px;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;box-shadow:0 2px 6px rgba(37,211,102,0.25);">'
-            f'💬 Open in WhatsApp (1-Click)'
+            f'<button style="background:linear-gradient(135deg, #25D366 0%, #128C7E 100%);color:white;border:none;padding:12px 20px;border-radius:10px;font-weight:700;font-size:1.02rem;cursor:pointer;width:100%;box-shadow:0 3px 10px rgba(37,211,102,0.3);margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;">'
+            f'💬 Open & Send to {clean_num} on WhatsApp (1-Click) →'
             f'</button></a>',
             unsafe_allow_html=True,
         )
+
+        with st.expander("⚡ Enable Automated Background Server Push (CallMeBot / Twilio)", expanded=False):
+            st.caption("Send advisories in the background directly from our server without opening WhatsApp on your device.")
+            st.markdown("**Option 1 (100% Free): CallMeBot Webhook**")
+            st.caption("1. Send `I allow callmebot to send me messages` to `+34 911 06 18 10` on WhatsApp ([Click here to send](https://api.whatsapp.com/send?phone=34911061810&text=I%20allow%20callmebot%20to%20send%20me%20messages)).")
+            st.caption("2. CallMeBot will reply with your API key. Enter it below:")
+            inline_cmb = st.text_input("CallMeBot API Key", value=cmb_key, type="password", key="inline_cmb_key")
+            if inline_cmb:
+                st.session_state["sb_cmb_key"] = inline_cmb
+
+            st.markdown("---")
+            st.markdown("**Option 2: Twilio WhatsApp API**")
+            inline_tw_sid = st.text_input("Twilio Account SID", value=tw_sid, type="password", key="inline_tw_sid")
+            inline_tw_tok = st.text_input("Twilio Auth Token", value=tw_token, type="password", key="inline_tw_tok")
+            if inline_tw_sid:
+                st.session_state["sb_tw_sid"] = inline_tw_sid
+            if inline_tw_tok:
+                st.session_state["sb_tw_tok"] = inline_tw_tok
+
+            if st.button("🚀 Dispatch via Server API Gateway", type="primary", use_container_width=True):
+                active_sid = inline_tw_sid or tw_sid
+                active_tok = inline_tw_tok or tw_token
+                active_cmb = inline_cmb or cmb_key
+                if (active_sid and active_tok) or active_cmb:
+                    with st.spinner("Dispatching outbound WhatsApp message via server gateway..."):
+                        disp_result = send_real_whatsapp_message(
+                            phone_number=clean_num,
+                            message=advisory_msg,
+                            twilio_sid=active_sid or None,
+                            twilio_token=active_tok or None,
+                            twilio_from=tw_from,
+                            callmebot_api_key=active_cmb or None,
+                        )
+                        st.session_state["last_wa_dispatch"] = disp_result
+                else:
+                    st.warning("Enter your CallMeBot API Key or Twilio credentials above to dispatch via background server API.")
 
     # Optional Auto-dispatch toggle
     auto_send = st.checkbox(
@@ -796,18 +855,6 @@ with wa_col:
         key="auto_wa_toggle",
         help="When enabled and risk is elevated (score >= 15), automatically dispatches WhatsApp alert upon report generation.",
     )
-
-    if send_push_btn:
-        with st.spinner("Dispatching outbound WhatsApp message via configured HTTP gateway..."):
-            disp_result = send_real_whatsapp_message(
-                phone_number=clean_num,
-                message=advisory_msg,
-                twilio_sid=tw_sid or None,
-                twilio_token=tw_token or None,
-                twilio_from=tw_from,
-                callmebot_api_key=cmb_key or None,
-            )
-            st.session_state["last_wa_dispatch"] = disp_result
 
     # Handle auto-send trigger
     if auto_send and risk.get("score", 0) >= 15:
@@ -838,10 +885,16 @@ with wa_col:
                 f"- **Status Detail:** {disp.get('status_detail', 'Sent successfully')}"
             )
         else:
-            st.info(
-                f"ℹ️ **Outbound Delivery Status: {disp.get('provider', 'unconfigured').upper()}**\n\n"
-                f"{disp.get('status_detail', 'API keys not configured.')}\n\n"
-                f"👉 **Direct Delivery Ready:** Click **'💬 Open in WhatsApp (1-Click)'** above to deliver this exact advisory immediately to your phone without API keys!"
+            st.success(
+                f"📱 **Advisory Ready for {clean_num}!**\n\n"
+                f"Click below to launch WhatsApp with the complete advisory prefilled:"
+            )
+            st.markdown(
+                f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+                f'<button style="background:#25D366;color:white;border:none;padding:10px 18px;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer;width:100%;box-shadow:0 2px 8px rgba(37,211,102,0.3);margin-bottom:8px;">'
+                f'👉 Open WhatsApp Chat with {clean_num} Now'
+                f'</button></a>',
+                unsafe_allow_html=True,
             )
 
     with st.expander("📝 View / Copy Formatted Bulletin Text", expanded=False):
